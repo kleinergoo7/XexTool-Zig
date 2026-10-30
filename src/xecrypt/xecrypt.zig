@@ -367,7 +367,7 @@ fn xecryptModMul(a: []const u8, b: []const u8, c: []u8, qw_mi: u64, m: []const u
                 value1 = value1 ^ value2;
                 value3 = value3 ^ value2;
                 carry1 = (((buf1[j + 1] ^ value2) | value1) ^ value2) >> 63;
-                carry2 = (((buf2[j + 1] ^ value3) | value3) ^ value2) >> 63;
+                carry2 = (((buf2[j + 1] ^ value2) | value3) ^ value2) >> 63;
             }
             return;
         }

@@ -99,9 +99,8 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
         crypto.XeCryptBnQwBeSigVerify(signature, &hash, salt, &data.xex_debug_public_key)
     else
         false;
-    // Prefer the retail interpretation when neither signature check succeeds;
-    // this matches the reference's all-zero fallback and avoids mislabelling
-    // retail files whose signature scheme this verifier cannot reproduce.
+    // Any non-zero signature that verifies under neither key is treated as
+    // retail. This keeps unsigned/foreign retail signatures readable.
     xex.is_debug = !retail_valid and !all_zero and debug_valid;
 
     var sec_info = try parseSecurityInfo(sec);
