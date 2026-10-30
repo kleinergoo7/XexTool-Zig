@@ -18,6 +18,8 @@ pub const Error = error{
     InvalidValue,
     SectionFile,
     OutOfBounds,
+    InvalidRange,
+    WriteFailed,
 };
 
 pub const usage =
@@ -230,7 +232,7 @@ fn elemAttrOrText(element: *tinyxml2.XMLNode, name: []const u8) ?[]const u8 {
 }
 
 fn parseU32(text: []const u8) ?u32 {
-    var rest = std.mem.trimLeft(u8, text, " \t\r\n");
+    var rest = std.mem.trimStart(u8, text, " \t\r\n");
     var base: u8 = 10;
     if (std.mem.startsWith(u8, rest, "0x") or std.mem.startsWith(u8, rest, "0X")) {
         rest = rest[2..];
@@ -243,7 +245,7 @@ fn parseU32(text: []const u8) ?u32 {
 }
 
 fn parseHexBytes(text: []const u8, output: *[16]u8) bool {
-    var rest = std.mem.trimLeft(u8, text, " \t");
+    var rest = std.mem.trimStart(u8, text, " \t");
     if (std.mem.startsWith(u8, rest, "0x") or std.mem.startsWith(u8, rest, "0X")) rest = rest[2..];
     var count: usize = 0;
     var index: usize = 0;

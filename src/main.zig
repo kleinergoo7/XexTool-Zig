@@ -67,7 +67,11 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(1);
     }
 
-    if (std.mem.eql(u8, args[1], "pack") or std.mem.eql(u8, args[1], "genstubs") or std.mem.eql(u8, args[1], "applyxml")) {
+    if (std.mem.eql(u8, args[1], "applyxml")) {
+        try runApplyXml(init, args, out);
+        return;
+    }
+    if (std.mem.eql(u8, args[1], "pack") or std.mem.eql(u8, args[1], "genstubs")) {
         try out.print("Error: subcommand {s} is not implemented yet\n", .{args[1]});
         try out.flush();
         std.process.exit(1);
@@ -98,6 +102,7 @@ pub fn main(init: std.process.Init) !void {
             'o' => {
                 options.output_new_exe = true;
                 options.out_filename = getopt.optarg.?;
+                options.xex_altered = true;
             },
             'x' => {
                 options.xml_output = true;
@@ -132,9 +137,6 @@ pub fn main(init: std.process.Init) !void {
                     options.info_get = true;
                 } else if (arg.len >= 1 and arg[0] == 's') {
                     options.info_set = true;
-                    try out.print("Error: -z s is not implemented yet\n", .{});
-                    try out.flush();
-                    std.process.exit(1);
                 } else {
                     try out.print("{s}\nError unknown info param\n", .{title});
                     try out.flush();
@@ -395,6 +397,16 @@ pub fn main(init: std.process.Init) !void {
         try xextool.xex.xmlout.print(out, &xex, options.xml, arena);
     }
 
+    if (options.info_set) {
+        xextool.xex.infoset.apply(init.io, &xex, options.info_path, arena) catch {
+            try out.print("Error reading and parsing info file: {s}\n", .{options.info_path});
+            try out.flush();
+            std.process.exit(1);
+        };
+        try out.print("Info was successfully set into xex file\n", .{});
+        options.xex_altered = true;
+    }
+
     if (options.info_get) {
         xextool.xex.infoget.writeInfo(init.io, &xex, options.info_path, arena) catch {
             try out.print("Error creating info file {s}\n", .{options.info_path});
@@ -404,12 +416,95 @@ pub fn main(init: std.process.Init) !void {
         try out.print("Wrote info to {s}\n", .{options.info_path});
     }
 
-    if (options.output_new_exe) {
-        try out.print("Error: writing a new xex is not implemented yet\n", .{});
-        try out.flush();
-        std.process.exit(1);
+    if (options.xex_altered) {
+        const filename = if (options.output_new_exe) options.out_filename else options.xex_filename;
+        try out.print("Creating and writing output xex file...\n", .{});
+        xextool.xex.writer.writeFile(&xex, init.io, filename) catch {
+            try out.print("Error writing altered xex to {s}\n", .{filename});
+            try out.flush();
+            std.process.exit(1);
+        };
+        try out.print("Successfully wrote altered xex to {s}\n", .{filename});
+        try out.print("\n{s} is {s} {s} {s}.\n", .{
+            filename,
+            if (xex.is_debug) "devkit" else "retail",
+            if (xex.is_encrypted) "encrypted" else "unencrypted",
+            if (xex.is_compressed) "compressed" else if (xex.is_raw) "uncompressed" else "binary",
+        });
     }
 
     try out.flush();
     try err.flush();
+}
+
+fn runApplyXml(init: std.process.Init, args: []const []const u8, out: anytype) !void {
+    var input: []const u8 = "";
+    var xml_path: []const u8 = "";
+    var output_path: []const u8 = "";
+
+    var index: usize = 2;
+    while (index < args.len) : (index += 1) {
+        const arg = args[index];
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            try out.print("{s}", .{xextool.xex.applyxml.usage});
+            try out.flush();
+            return;
+        } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--out")) {
+            index += 1;
+            if (index >= args.len) {
+                try out.print("{s}", .{xextool.xex.applyxml.usage});
+                try out.flush();
+                std.process.exit(1);
+            }
+            output_path = args[index];
+        } else if (std.mem.eql(u8, arg, "--xml")) {
+            index += 1;
+            if (index >= args.len) {
+                try out.print("{s}", .{xextool.xex.applyxml.usage});
+                try out.flush();
+                std.process.exit(1);
+            }
+            xml_path = args[index];
+        } else if (arg.len != 0 and arg[0] == '-') {
+            try out.print("Unknown option: {s}\n\n{s}", .{ arg, xextool.xex.applyxml.usage });
+            try out.flush();
+            std.process.exit(1);
+        } else if (input.len == 0) {
+            input = arg;
+        } else {
+            try out.print("Unexpected argument: {s}\n\n{s}", .{ arg, xextool.xex.applyxml.usage });
+            try out.flush();
+            std.process.exit(1);
+        }
+    }
+
+    if (input.len == 0 or xml_path.len == 0) {
+        try out.print("{s}", .{xextool.xex.applyxml.usage});
+        try out.flush();
+        std.process.exit(1);
+    }
+    if (output_path.len == 0) output_path = input;
+
+    var xex = xextool.xex.model.Xex.init(init.arena.allocator());
+    defer xex.deinit();
+    const read_ok = xextool.xex.reader.readFile(&xex, init.io, input) catch false;
+    if (!read_ok) {
+        try out.print("applyxml: failed to read {s}\n", .{input});
+        try out.flush();
+        std.process.exit(1);
+    }
+
+    xextool.xex.applyxml.apply(init.io, &xex, xml_path, init.arena.allocator(), out) catch {
+        try out.print("applyxml: failed to apply {s}\n", .{xml_path});
+        try out.flush();
+        std.process.exit(1);
+    };
+
+    xextool.xex.writer.writeFile(&xex, init.io, output_path) catch {
+        try out.print("applyxml: failed to write {s}\n", .{output_path});
+        try out.flush();
+        std.process.exit(1);
+    };
+    try out.print("applyxml: wrote {s}\n", .{output_path});
+    try out.flush();
 }

@@ -358,7 +358,6 @@ test "packRaw then unpackRaw round-trips" {
     var info = DataBlock.init();
     defer info.deinit(std.testing.allocator);
     try packRaw(&xex, &packed_block, &info, input.len);
-    std.debug.print("packRaw packed={d} info={d} info0={d} info8={d} info12={d}\n", .{ packed_block.size(), info.size(), info.get32be(0), info.get32be(8), info.get32be(12) });
 
     var decoded = model.Xex.init(std.testing.allocator);
     defer decoded.deinit();
