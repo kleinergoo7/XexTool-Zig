@@ -244,7 +244,7 @@ pub fn XeCryptBnQwBeSigCreate(signature: *Signature, hash: []const u8, salt: []c
     if (!XeCryptBnQwNeModExp(&pow_result, &two_qw, &exponent_qw, modulus, count)) return false;
 
     const M = std.crypto.ff.Modulus(4096);
-    const modulus_be = qwArrayToBeBytes(&modulus);
+    const modulus_be = qwArrayToBeBytes(modulus);
     const m = M.fromBytes(&modulus_be, .big) catch return false;
     const a = M.Fe.fromBytes(m, &qwArrayToBeBytes(&pow_result), .big) catch return false;
     const b = M.Fe.fromBytes(m, &qwArrayToBeBytes(signature), .big) catch return false;

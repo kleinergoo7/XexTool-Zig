@@ -67,8 +67,9 @@ pub fn errorIDToName(id: XMLError) []const u8 {
 }
 
 pub fn errorIDFromInt(raw: i32) ?XMLError {
+    // error_count is 19, so the i32 cast is exact.
     if (raw < 0 or raw >= @as(i32, @intCast(error_count))) return null;
-    return @fromBackingInt(@intCast(raw));
+    return @fromBackingInt(@intCast(raw)); // range checked above
 }
 
 // ---------- character classes ---------- //
@@ -138,6 +139,8 @@ pub const CharRef = struct {
 /// `XMLUtil::ConvertUTF32ToUTF8`. Returns null for code points the reference
 /// refuses to encode (>= 0x200000).
 pub fn convertUTF32ToUTF8(input: u32) ?struct { bytes: [4]u8, len: u8 } {
+    // Every branch below masks the output byte with 0xFF, so all @intCast
+    // conversions are in range for u8.
     var out: [4]u8 = undefined;
     if (input < 0x80) {
         out[0] = @intCast(input);
@@ -435,6 +438,8 @@ fn scanInt(s: []const u8, radix: u64) ?ScannedInt {
 }
 
 /// `XMLUtil::ToInt`: scanf "%d" or "%x", trailing garbage allowed.
+/// The casts model C's assignment of a strtol/strtoul result to `int`:
+/// truncate to 32 bits, then reinterpret the bit pattern.
 pub fn toInt(s: []const u8, value: *i32) bool {
     if (isPrefixHex(s)) {
         const scanned = scanInt(s, 16) orelse return false;
@@ -471,7 +476,8 @@ pub fn toUnsigned(s: []const u8, value: *u32) bool {
     return true;
 }
 
-/// `XMLUtil::ToInt64`: scanf "%lld" or "%llx".
+/// `XMLUtil::ToInt64`: scanf "%lld" or "%llx". The bit casts preserve the
+/// two's-complement assignment semantics of the C version.
 pub fn toInt64(s: []const u8, value: *i64) bool {
     if (isPrefixHex(s)) {
         const scanned = scanInt(s, 16) orelse return false;
@@ -677,6 +683,7 @@ fn parseHexFloatExact(comptime T: type, text: []const u8) ?T {
         if (exp_negative) exponent = -exponent;
     }
 
+    // Both counts are bounded by the input slice length (< 2^63).
     const tail: i64 = @as(i64, @intCast(total - collected));
     const frac: i64 = @intCast(frac_digits);
     var e2: i64 = 4 *| (tail - frac) +| exponent;
@@ -688,6 +695,7 @@ fn parseHexFloatExact(comptime T: type, text: []const u8) ?T {
     var shift: u32 = 0;
     if (bit_length > precision) {
         shift = bit_length - precision;
+        // shift is at most 128 - 24, so both shift expressions fit u128/u7.
         const half = @as(u128, 1) << @intCast(shift - 1);
         const mask = (half << 1) - 1;
         const remainder = c & mask;
@@ -700,7 +708,7 @@ fn parseHexFloatExact(comptime T: type, text: []const u8) ?T {
             }
         }
     }
-    e2 = e2 +| @as(i64, @intCast(shift));
+    e2 = e2 +| @as(i64, @intCast(shift)); // shift <= 128
 
     // Clamp before the i32 conversion; ldexp already maps overflow to inf and
     // severe underflow to zero.
@@ -709,7 +717,7 @@ fn parseHexFloatExact(comptime T: type, text: []const u8) ?T {
     else if (e2 < -100000)
         -100000
     else
-        @intCast(e2);
+        @intCast(e2); // clamped to [-100000, 100000], fits i32
 
     const value: T = std.math.ldexp(@as(T, @floatFromInt(q)), be);
     return if (negative) -value else value;
@@ -769,6 +777,9 @@ pub fn formatBool(buf: []u8, v: bool, unused: usize) []const u8 {
 
 /// C `%.8g` (float promoted to double) and `%.17g` (double), without the
 /// printf locale.
+///
+/// Every integer cast below is bounded by the IEEE-754 field widths (11, 52,
+/// 63) or by the 800-digit scratch buffer.
 ///
 /// Zig's float renderer emits the shortest round-trip form; `%.17g` needs the
 /// correctly rounded 17-significant-digit form, which can differ in the last
@@ -959,6 +970,8 @@ fn formatG(buf: []u8, value: f64, precision_in: usize) []const u8 {
 /// Little-endian base-2^64 integer, large enough for `m * 5^1074` (about
 /// 2547 bits). Only the operations needed for exact float-to-decimal are here.
 const BigInt = struct {
+    // All narrowing/widening casts below stay inside u64 limbs: the u128
+    // product split is 64+64 bits, and each division remainder is < divisor.
     limbs: [64]u64 = @splat(0),
     len: usize = 0,
 

@@ -63,6 +63,7 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
         }
 
         try dispatchEntry(xex, entry, &block);
+        block.deinit(xex.gpa);
     }
 
     if (security_offset > bytes.len or bytes.len - security_offset < security_info_size) return error.InvalidSecurityInfo;
@@ -282,7 +283,29 @@ fn parseBasefileFormat(xex: *model.Xex, raw: []const u8, block: *const DataBlock
         3 => xex.is_delta_compressed = true,
         else => xex.is_binary = true,
     }
-    xex.basefile_format = try block.clone(xex.gpa);
+
+    // The C++ converts this entry to host order before storing it and the
+    // packer then uses DataBlock::get32/get16. Keep that invariant.
+    var converted = DataBlock.init();
+    errdefer converted.deinit(xex.gpa);
+    try converted.set(xex.gpa, raw, 0, @intCast(raw.len));
+    try converted.set32(xex.gpa, endian.get32be(raw, 0), 0);
+    try converted.set16(xex.gpa, enc_type, 4);
+    try converted.set16(xex.gpa, comp_type, 6);
+    if (comp_type == 1) {
+        var offset: usize = 8;
+        while (offset + 8 <= raw.len) : (offset += 8) {
+            try converted.set32(xex.gpa, endian.get32be(raw, offset), @intCast(offset));
+            try converted.set32(xex.gpa, endian.get32be(raw, offset + 4), @intCast(offset + 4));
+        }
+    } else if (comp_type == 2 or comp_type == 3) {
+        if (raw.len >= 16) {
+            try converted.set32(xex.gpa, endian.get32be(raw, 8), 8);
+            try converted.set32(xex.gpa, endian.get32be(raw, 12), 12);
+        }
+    }
+    xex.basefile_format = converted;
+    _ = block;
 }
 
 fn parseResources(xex: *model.Xex, raw: []const u8, info_size: i32) Error!void {

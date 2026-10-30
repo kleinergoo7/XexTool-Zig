@@ -951,25 +951,17 @@ fn returnDifference(self: *Encoder, item_start1_in: u32, item_start2_in: u32, di
         freq2[element] +%= 1;
     }
 
-    if (size == resolution and item_start1_in == 2048) {
-        var s1: u32 = 0;
-        var s2: u32 = 0;
-        for (freq1) |v| s1 += v;
-        for (freq2) |v| s2 += v;
-    }
-    if (item_start1_in == 2048 and item_start2_in == 3072) {
-        var e: u32 = 0;
-        while (e < elements) : (e += 1) {}
-    }
     var cum_diff: u32 = 0;
     i = 0;
     while (i < elements) : (i += 1) {
         const log2a = c.log2(freq1[i]);
         const log2b = c.log2(freq2[i]);
-        const diff: i64 = c.square_table[log2a] - c.square_table[log2b];
-        // C stores the long difference in a uint32_t and then takes abs of the
-        // zero-extended value, i.e. the truncated difference survives as is.
-        cum_diff +%= @truncate(@as(u64, @bitCast(diff)));
+        // The C code stores the signed difference in a uint32_t and then calls
+        // abs((long)diff); abs takes an int, so the long is truncated back and
+        // the result is the magnitude of the signed difference.
+        const diff = c.square_table[log2a] - c.square_table[log2b];
+        const magnitude: u32 = @intCast(if (diff < 0) -diff else diff);
+        cum_diff +%= magnitude;
     }
 
     return cum_diff;
@@ -2219,15 +2211,4 @@ test "window base slides back by the secondary partition" {
 
     // After four chunks the window slid once: base = 32768 - 65536.
     try std.testing.expectEqual(@as(isize, -0x8000 - 0x10000), encoder.mem_base);
-}
-
-test "DEBUG return difference against C" {
-    const allocator = std.testing.allocator;
-    var dest: [16]u8 = @splat(0);
-    const e = try createCompressionWindow(allocator, &dest, 0x20000);
-    defer destroyCompression(e);
-    for (0..max_literal_items) |i| e.lit_data[i] = @truncate(i *% 37 +% 11);
-    for (0..max_literal_items / 8) |i| e.item_type[i] = @truncate(i *% 53 +% 7);
-    for (0..max_dist_items) |i| e.dist_data[i] = @intCast((i *% 101 +% 3) % 500 + 3);
-    std.debug.print("RDZ {d} {d}\n", .{ returnDifference(e, 0, 1024, 0, 10, 1024), returnDifference(e, 2048, 3072, 22, 44, 1024) });
 }

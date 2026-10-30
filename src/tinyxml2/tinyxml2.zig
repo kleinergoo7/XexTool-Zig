@@ -1,5 +1,30 @@
 // SPDX-FileCopyrightText: 2026 XexTool Zig rewrite contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This is an altered, Zig port of tinyxml2 11.0.0 by Lee Thomason
+// (www.grinninglizard.com), originally distributed under the zlib license.
+// The original notice is retained here:
+//
+//   Original code by Lee Thomason (www.grinninglizard.com)
+//
+//   This software is provided 'as-is', without any express or implied
+//   warranty. In no event will the authors be held liable for any
+//   damages arising from the use of this software.
+//
+//   Permission is granted to anyone to use this software for any
+//   purpose, including commercial applications, and to alter it and
+//   redistribute it freely, subject to the following restrictions:
+//
+//   1. The origin of this software must not be misrepresented; you must
+//   not claim that you wrote the original software. If you use this
+//   software in a product, an acknowledgment in the product documentation
+//   would be appreciated but is not required.
+//
+//   2. Altered source versions must be plainly marked as such, and
+//   must not be misrepresented as being the original software.
+//
+//   3. This notice may not be removed or altered from any source
+//   distribution.
 
 //! tinyxml2 11.0.0 ported to Zig 0.17.0.
 //!
@@ -28,6 +53,7 @@ const util = @import("util.zig");
 pub const XMLError = util.XMLError;
 pub const error_count = util.error_count;
 pub const errorIDToName = util.errorIDToName;
+pub const errorIDFromInt = util.errorIDFromInt;
 pub const TIXML2_MAJOR_VERSION = 11;
 pub const TIXML2_MINOR_VERSION = 0;
 pub const TIXML2_PATCH_VERSION = 0;
@@ -1507,21 +1533,36 @@ pub const XMLDocument = struct {
             return self.error_id;
         };
         self.clear();
-        const data = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .unlimited) catch |err| {
-            if (err == error.OutOfMemory) return err;
+
+        const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch {
             var detail_buf: [1000]u8 = undefined;
-            const id: XMLError = if (err == error.FileNotFound)
-                .error_file_not_found
-            else
-                .error_file_read_error;
-            self.setError(id, 0, detailName(&detail_buf, "filename=", path));
+            self.setError(.error_file_not_found, 0, detailName(&detail_buf, "filename=", path));
             return self.error_id;
         };
-        defer self.allocator.free(data);
-        if (data.len == 0) {
+        defer file.close(io);
+
+        const stat = file.stat(io) catch {
+            self.setError(.error_file_read_error, 0, null);
+            return self.error_id;
+        };
+        if (stat.kind == .directory or stat.size >= std.math.maxInt(usize)) {
+            self.setError(.error_file_read_error, 0, null);
+            return self.error_id;
+        }
+        if (stat.size == 0) {
             self.setError(.error_empty_document, 0, null);
             return self.error_id;
         }
+
+        // Checked above: stat.size < maxInt(usize).
+        const data = try self.allocator.alloc(u8, @intCast(stat.size));
+        defer self.allocator.free(data);
+
+        var file_reader = file.reader(io, &.{});
+        file_reader.interface.readSliceAll(data) catch {
+            self.setError(.error_file_read_error, 0, null);
+            return self.error_id;
+        };
         return self.parse(data);
     }
 
@@ -1671,17 +1712,19 @@ pub const XMLDocument = struct {
             .{
                 util.errorIDToName(id),
                 @as(i32, @backingInt(id)),
-                @as(u32, @intCast(@backingInt(id))),
+                @as(u32, @intCast(@backingInt(id))), // enum values are 0..18
+
                 line,
             },
         ) catch unreachable; // fixed text is far below 1000 bytes.
         var len = base.len;
         if (detail) |d| {
             const sep = ": ";
-            const sep_n = @min(sep.len, self.error_buf.len - len);
+            const sep_n = @min(sep.len, self.error_buf.len - 1 - len);
             @memcpy(self.error_buf[len..][0..sep_n], sep[0..sep_n]);
             len += sep_n;
-            const room = self.error_buf.len - len;
+            // snprintf leaves room for its NUL, so at most 999 characters.
+            const room = self.error_buf.len - 1 - len;
             const n = @min(d.len, room);
             @memcpy(self.error_buf[len..][0..n], d[0..n]);
             len += n;

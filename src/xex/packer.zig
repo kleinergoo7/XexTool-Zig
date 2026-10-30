@@ -66,8 +66,8 @@ fn unpackRaw(xex: *model.Xex, basefile_in: DataBlock, unpack_info: DataBlock, im
 
     while (output_offset < image_size) {
         if (block_offset + 8 > info.len) return error.InvalidBaseFileInfo;
-        const data_size: i32 = @bitCast(endian.get32be(info, block_offset));
-        const zero_size: i32 = @bitCast(endian.get32be(info, block_offset + 4));
+        const data_size: i32 = @bitCast(unpack_info.get32(@intCast(block_offset)));
+        const zero_size: i32 = @bitCast(unpack_info.get32(@intCast(block_offset + 4)));
         block_offset += 8;
         if (data_size < 0 or zero_size < 0) return error.InvalidBaseFileInfo;
 
@@ -96,7 +96,7 @@ fn unpackCompressed(xex: *model.Xex, basefile_in: DataBlock, unpack_info: DataBl
 
     const info = unpack_info.data();
     if (info.len < 0x24) return error.InvalidBaseFileInfo;
-    const window_size = endian.get32be(info, 8);
+    const window_size = unpack_info.get32(8);
     const input_bytes = input.data();
 
     xex.basefile.clear(xex.gpa);
@@ -109,7 +109,7 @@ fn unpackCompressed(xex: *model.Xex, basefile_in: DataBlock, unpack_info: DataBl
     var first = true;
 
     while (output_offset < image_size) {
-        const data_size: usize = if (first) endian.get32be(info, 12) else endian.get32be(input_bytes, input_offset);
+        const data_size: usize = if (first) unpack_info.get32(12) else endian.get32be(input_bytes, input_offset);
         const hash = if (first) info[16..36] else input_bytes[input_offset + 4 ..][0..20];
         input_offset += block_size;
         block_size = data_size;
@@ -150,7 +150,7 @@ fn packBinary(xex: *model.Xex, basefile_out: *DataBlock, unpack_info: *DataBlock
     try unpack_info.set32(xex.gpa, 0x10, 0);
     try unpack_info.set16(xex.gpa, if (xex.is_encrypted) 1 else 0, 4);
     try unpack_info.set16(xex.gpa, 1, 6);
-    try unpack_info.set32(xex.gpa, basefile_out.size(), 8);
+    try unpack_info.set32(xex.gpa, @intCast(basefile_out.size()), 8);
     try unpack_info.set32(xex.gpa, 0, 12);
 }
 
@@ -174,7 +174,7 @@ fn packRaw(xex: *model.Xex, basefile_out: *DataBlock, unpack_info: *DataBlock, i
     while (data_offset < data_size) {
         if (data_block_size != 0 and @mod(data_offset, page_size) == 0) {
             var scan = data_offset;
-            while (scan < data_size and data[scan] == 0) : (scan += 1) {
+            while (scan < data_size and data[@intCast(scan)] == 0) : (scan += 1) {
                 zero_block_size += 1;
             }
         }
@@ -182,8 +182,8 @@ fn packRaw(xex: *model.Xex, basefile_out: *DataBlock, unpack_info: *DataBlock, i
 
         if (zero_block_size >= page_size or data_offset + zero_block_size == data_size) {
             const info_offset = unpack_info.size();
-            try unpack_info.set32(xex.gpa, data_block_size, info_offset);
-            try unpack_info.set32(xex.gpa, if (data_offset + zero_block_size != data_size) zero_block_size else 0, info_offset + 4);
+            try unpack_info.set32(xex.gpa, @intCast(data_block_size), info_offset);
+            try unpack_info.set32(xex.gpa, if (data_offset + zero_block_size != data_size) @as(u32, @intCast(zero_block_size)) else 0, info_offset + 4);
 
             try basefile_out.set(xex.gpa, data[@intCast(data_offset - data_block_size)..][0..@intCast(data_block_size)], output_offset, data_block_size);
             output_offset += data_block_size;
@@ -202,13 +202,13 @@ fn packRaw(xex: *model.Xex, basefile_out: *DataBlock, unpack_info: *DataBlock, i
 
     if (data_block_size != 0 or zero_block_size != 0) {
         const info_offset = unpack_info.size();
-        try unpack_info.set32(xex.gpa, data_block_size, info_offset);
+        try unpack_info.set32(xex.gpa, @intCast(data_block_size), info_offset);
         try unpack_info.set32(xex.gpa, 0, info_offset + 4);
         try basefile_out.set(xex.gpa, data[@intCast(data_offset - data_block_size)..][0..@intCast(data_block_size)], output_offset, data_block_size);
     }
 
     if (xex.is_encrypted) try encrypt(xex, basefile_out);
-    try unpack_info.set32(xex.gpa, unpack_info.size(), 0);
+    try unpack_info.set32(xex.gpa, @intCast(unpack_info.size()), 0);
 }
 
 fn packCompressed(xex: *model.Xex, basefile_out: *DataBlock, unpack_info: *DataBlock, image_size: i32) Error!void {
@@ -337,11 +337,9 @@ test "unpackRaw: copies blocks and expands zero runs" {
 
     var info = DataBlock.init();
     defer info.deinit(std.testing.allocator);
-    var raw_info: [16]u8 = @splat(0);
-    endian.set32be(&raw_info, 0, 16);
-    endian.set32be(&raw_info, 8, 4);
-    endian.set32be(&raw_info, 12, 4);
-    try info.set(std.testing.allocator, &raw_info, 0, 16);
+    try info.set32(std.testing.allocator, 16, 0);
+    try info.set32(std.testing.allocator, 4, 8);
+    try info.set32(std.testing.allocator, 4, 12);
 
     try unpackRaw(&xex, input, info, 8);
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3, 4, 0, 0, 0, 0 }, xex.basefile.data());
@@ -360,6 +358,7 @@ test "packRaw then unpackRaw round-trips" {
     var info = DataBlock.init();
     defer info.deinit(std.testing.allocator);
     try packRaw(&xex, &packed_block, &info, input.len);
+    std.debug.print("packRaw packed={d} info={d} info0={d} info8={d} info12={d}\n", .{ packed_block.size(), info.size(), info.get32be(0), info.get32be(8), info.get32be(12) });
 
     var decoded = model.Xex.init(std.testing.allocator);
     defer decoded.deinit();

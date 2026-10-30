@@ -50,8 +50,8 @@ pub const Parser = struct {
 
     pub fn numberOfSections(self: Parser) ?u16 {
         const pe = self.peOffset() orelse return null;
-        if (self.data.len - (pe + 0x04) < 2) return null;
-        return self.u16le(pe + 0x04);
+        if (pe + 0x02 > self.data.len or self.data.len - (pe + 0x02) < 2) return null;
+        return self.u16le(pe + 0x02);
     }
 
     pub fn entryPoint(self: Parser) ?u32 {
@@ -74,8 +74,8 @@ pub const Parser = struct {
 
     pub fn filetime(self: Parser) ?u32 {
         const pe = self.peOffset() orelse return null;
-        if (self.data.len - (pe + 0x08) < 4) return null;
-        return self.u32le(pe + 0x08);
+        if (pe + 0x04 > self.data.len or self.data.len - (pe + 0x04) < 4) return null;
+        return self.u32le(pe + 0x04);
     }
 
     pub const Section = struct {
@@ -109,7 +109,7 @@ test "PE parser reads the DOS and NT headers" {
     endian.set32le(&bytes, 0x3C, 0x80);
     bytes[0x80] = 'P';
     bytes[0x81] = 'E';
-    endian.set16le(&bytes, 0x84, 1);
+    endian.set16le(&bytes, 0x86, 1);
     endian.set32le(&bytes, 0x88, 0x11223344);
     endian.set16le(&bytes, 0x94, 0xE0);
     endian.set32le(&bytes, 0x98 + 0x10, 0x82010000);

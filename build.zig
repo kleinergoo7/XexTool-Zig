@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
 
-    inline for ([_][]const u8{ "src/lzx/lzx.zig", "src/tinyxml2/tinyxml2.zig" }) |root| {
+    inline for ([_][]const u8{ "src/agg.zig", "src/lzx/lzx.zig", "src/tinyxml2/tinyxml2.zig" }) |root| {
         const dep_tests = b.addTest(.{
             .root_module = b.createModule(.{
                 .root_source_file = b.path(root),

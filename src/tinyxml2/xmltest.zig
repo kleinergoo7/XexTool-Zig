@@ -63,7 +63,7 @@ test "programmatic DOM matches the reference compact output" {
     var subs: [3]*tx.XMLNode = undefined;
     for (&subs, 0..) |*slot, i| {
         slot.* = try doc.newElement("sub");
-        try slot.*.setAttributeInt("attrib", @intCast(i));
+        try slot.*.setAttributeInt("attrib", @intCast(i)); // i is 0..2
     }
     _ = try element.insertEndChild(subs[2]);
 
@@ -75,6 +75,7 @@ test "programmatic DOM matches the reference compact output" {
     _ = try element.insertAfterChild(subs[0], subs[1]);
     _ = try subs[2].insertFirstChild(try doc.newText("& Text!"));
 
+    // The test only compares the pointer value round trip.
     try std.testing.expectEqual(@as(*anyopaque, @ptrCast(&dummy)), comment.user_data.?);
     try std.testing.expectEqualStrings("comment", element.firstChild().?.value().?);
     try std.testing.expectEqualStrings("0", element.firstChildElement(null).?.attribute("attrib", null).?);
@@ -337,8 +338,8 @@ test "line numbers through a visitor" {
 
         fn push(self: *Self, kind: u8, line: i32) void {
             self.buf[self.len] = kind;
-            self.buf[self.len + 1] = '0' + @as(u8, @intCast(@divTrunc(line, 10)));
-            self.buf[self.len + 2] = '0' + @as(u8, @intCast(@mod(line, 10)));
+            self.buf[self.len + 1] = '0' + @as(u8, @intCast(@divTrunc(line, 10))); // test lines are 0..99
+            self.buf[self.len + 2] = '0' + @as(u8, @intCast(@mod(line, 10))); // remainder is 0..9
             self.len += 3;
         }
 
@@ -478,7 +479,7 @@ test "handles find children safely" {
 
 test "all error ids have names" {
     var raw: i32 = 0;
-    while (raw < @as(i32, @intCast(tx.error_count))) : (raw += 1) {
+    while (raw < @as(i32, @intCast(tx.error_count))) : (raw += 1) { // 19 fits i32
         const id: XMLError = @fromBackingInt(raw); // raw is bounded by the loop condition.
         const name = XMLDocument.errorIDToName(id);
         try std.testing.expect(name.len > 0);
@@ -541,6 +542,20 @@ test "save and load a file" {
 
     try std.testing.expectEqual(XMLError.error_file_not_found, try loaded.loadFile(io, "no/such/file.xml"));
     try std.testing.expectEqualStrings("XML_ERROR_FILE_NOT_FOUND", loaded.errorName());
+    try std.testing.expectEqualStrings(
+        "Error=XML_ERROR_FILE_NOT_FOUND ErrorID=3 (0x3) Line number=0: filename=no/such/file.xml",
+        loaded.errorStr(),
+    );
+    try std.testing.expectEqual(XMLError.error_file_could_not_be_opened, try loaded.saveFile(io, "no/such/dir/out.xml", false));
+    try std.testing.expectEqualStrings(
+        "Error=XML_ERROR_FILE_COULD_NOT_BE_OPENED ErrorID=4 (0x4) Line number=0: filename=no/such/dir/out.xml",
+        loaded.errorStr(),
+    );
+    try std.testing.expectEqual(XMLError.error_file_could_not_be_opened, try loaded.loadFile(io, null));
+    try std.testing.expectEqualStrings(
+        "Error=XML_ERROR_FILE_COULD_NOT_BE_OPENED ErrorID=4 (0x4) Line number=0: filename=<null>",
+        loaded.errorStr(),
+    );
 }
 
 test "BOM survives a file round trip" {
@@ -613,6 +628,40 @@ test "allocation failure during parse, print and clone leaves no leaks" {
             }
         }
     }
+}
+
+test "document create/destroy and deepCopy" {
+    const gpa = std.testing.allocator;
+    const doc = try XMLDocument.create(gpa, .{});
+    defer doc.destroy();
+
+    try std.testing.expectEqual(XMLError.success, try doc.parse("<?xml version='1.0'?><!--top--><root><a>1</a></root>"));
+    const source = try printToString(doc, gpa, false);
+    defer gpa.free(source);
+
+    var target: XMLDocument = undefined;
+    target.init(gpa, .{});
+    defer target.deinit();
+    try doc.deepCopy(&target);
+    const copied = try printToString(&target, gpa, false);
+    defer gpa.free(copied);
+    try std.testing.expectEqualStrings(source, copied);
+}
+
+test "printer buffer can be reused" {
+    const gpa = std.testing.allocator;
+    var doc: XMLDocument = undefined;
+    doc.init(gpa, .{});
+    defer doc.deinit();
+    try std.testing.expectEqual(XMLError.success, try doc.parse("<a>1</a>"));
+
+    var printer = try XMLPrinter.init(gpa, .{});
+    defer printer.deinit();
+    try doc.print(&printer);
+    try std.testing.expectEqualStrings("<a>1</a>\n", printer.cstr());
+    printer.clearBuffer(true);
+    try doc.print(&printer);
+    try std.testing.expectEqualStrings("<a>1</a>\n", printer.cstr());
 }
 
 // ---------- resource goldens (XEXTOOL_TEST_DIR) ---------- //
