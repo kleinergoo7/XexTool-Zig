@@ -425,7 +425,8 @@ pub fn main(init: std.process.Init) !void {
         try out.print("  removed signed keyvault only limit\n", .{});
     }
     if (options.remove_library_limit) {
-        for (xex.import_libraries.items) |*library| library.min_version = 0;
+        // Reference clears only the 16-bit build field (bits 8..23).
+        for (xex.import_libraries.items) |*library| library.min_version &= 0xFF0000FF;
         try out.print("  removed library version limit\n", .{});
     }
     if (options.remove_revocation) {

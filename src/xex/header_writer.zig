@@ -1274,6 +1274,7 @@ test "writeHeaders: debug signature matches the reference signing path" {
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
     try std.testing.expect(try reader.readBytes(&parsed, bytes));
+    try std.testing.expect(parsed.is_debug);
 }
 
 test "writeHeaders: entry order, import tail placement and section hashes" {
@@ -1452,6 +1453,7 @@ test "writeHeaders: entry order, import tail placement and section hashes" {
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
     try std.testing.expect(try reader.readBytes(&parsed, bytes));
+    try std.testing.expect(parsed.is_debug);
     try std.testing.expectEqual(@as(usize, 1), parsed.resources.items.len);
     try std.testing.expectEqualSlices(u8, &[_]u8{ 'R', 'E', 'S', 'X', 0, 0, 0, 0 }, &parsed.resources.items[0].name);
     try std.testing.expectEqual(@as(usize, 2), parsed.import_libraries.items.len);

@@ -69,8 +69,10 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
     if (security_offset > bytes.len or bytes.len - security_offset < security_info_size) return error.InvalidSecurityInfo;
     const sec = bytes[security_offset..];
 
-    const image_info_size = try cursor.readU32beAt(sec, 0x108);
-    if (image_info_size < 0x100 or image_info_size > sec.len) return error.InvalidSecurityInfo;
+    const image_info_size: usize = try cursor.readU32beAt(sec, 0x108);
+    // infoSize counts from the signature field at sec+0x08, so the hashed region
+    // spans infoSize-0x100 bytes starting at sec+0x108.
+    if (image_info_size < 0x100 or image_info_size > sec.len - 8) return error.InvalidSecurityInfo;
 
     const raw_image_flags = try cursor.readU32beAt(sec, 0x10C);
     const salt = if ((raw_image_flags & defines.image_flag_revocation_check_req) != 0)
@@ -79,7 +81,8 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
         data.xex_salt_xex[0..];
 
     var hash: [20]u8 = undefined;
-    crypto.XeCryptRotSumSha(sec[0x108..@intCast(image_info_size)], "", &hash, 20);
+    const hash_end = 8 + image_info_size;
+    crypto.XeCryptRotSumSha(sec[0x108..hash_end], "", &hash, 20);
 
     const signature = sec[0x008..0x108];
     const retail_valid = crypto.XeCryptBnQwBeSigVerify(
@@ -95,13 +98,10 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
             break;
         }
     }
-    const debug_valid = if (!retail_valid and !all_zero)
-        crypto.XeCryptBnQwBeSigVerify(signature, &hash, salt, &data.xex_debug_public_key)
-    else
-        false;
-    // Any non-zero signature that verifies under neither key is treated as
-    // retail. This keeps unsigned/foreign retail signatures readable.
-    xex.is_debug = !retail_valid and !all_zero and debug_valid;
+    // Reference rule: a security info whose retail signature does not verify is
+    // a debug build, unless the signature is all zeros (retail files rewritten
+    // without signing).
+    xex.is_debug = !retail_valid and !all_zero;
 
     var sec_info = try parseSecurityInfo(sec);
     const is_mfg = (sec_info.image_info.image_flags & (defines.image_flag_manufacturing_utility | defines.image_flag_manufacturing_tool)) != 0;
