@@ -18,10 +18,11 @@ modules are being integrated.
 | `-d <dir>` resource dump | byte-identical |
 | `-x <flags>` XML metadata | byte-identical for implemented flags |
 | `-z g <file>` info XML | byte-identical |
+| `-z s <file>` set info | byte-identical |
+| `-r`, `-m`, `-c`, `-e`, `-a`, `-o` | byte-identical on reference fixtures |
+| `applyxml <xex> --xml <file>` | byte-identical |
 
-Not implemented yet: `-p`, `-u`, `-s`, `-r`, `-m`, `-c`, `-e`, `-a`, `-o`, `-z s`,
-`pack`, `genstubs`, and `applyxml`. Compressed XEX reading works; writing lands with the
-writer integration.
+Not implemented yet: `-p`, `-u`, `-s`, `-r s`, `pack`, and `genstubs`.
 
 ## Build
 
