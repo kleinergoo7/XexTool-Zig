@@ -26,6 +26,9 @@ test {
     std.testing.refAllDecls(@import("xex/idc.zig"));
     std.testing.refAllDecls(@import("xex/applyxml.zig"));
     std.testing.refAllDecls(@import("xex/patcher.zig"));
+    std.testing.refAllDecls(@import("xex/special.zig"));
     std.testing.refAllDecls(@import("xex/writer.zig"));
     std.testing.refAllDecls(@import("xex/header_writer.zig"));
+    std.testing.refAllDecls(@import("pack/elf.zig"));
+    std.testing.refAllDecls(@import("pack/genstubs.zig"));
 }

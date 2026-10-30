@@ -24,8 +24,13 @@ pub const xex = struct {
     pub const idc = @import("xex/idc.zig");
     pub const applyxml = @import("xex/applyxml.zig");
     pub const patcher = @import("xex/patcher.zig");
+    pub const special = @import("xex/special.zig");
     pub const writer = @import("xex/writer.zig");
     pub const header_writer = @import("xex/header_writer.zig");
+    pub const pack = struct {
+        pub const elf = @import("pack/elf.zig");
+        pub const genstubs = @import("pack/genstubs.zig");
+    };
 };
 
 test {

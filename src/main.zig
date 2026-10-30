@@ -39,6 +39,10 @@ const Options = struct {
     remove_library_limit: bool = false,
     remove_revocation: bool = false,
     remove_media_id: bool = false,
+    remove_discswap: bool = false,
+    update_patches: bool = false,
+    special_patches: bool = false,
+    special_patch_num: u32 = 0,
     xex_altered: bool = false,
     xml: xextool.xex.xmlout.Flags = .{},
     info_get: bool = false,
@@ -73,10 +77,25 @@ pub fn main(init: std.process.Init) !void {
         try runApplyXml(init, args, out);
         return;
     }
-    if (std.mem.eql(u8, args[1], "pack") or std.mem.eql(u8, args[1], "genstubs")) {
-        try out.print("Error: subcommand {s} is not implemented yet\n", .{args[1]});
+    if (std.mem.eql(u8, args[1], "pack")) {
+        const code = xextool.xex.pack.elf.run(init.io, args, out) catch |run_err| {
+            try out.print("pack failed: {s}\n", .{@errorName(run_err)});
+            try out.flush();
+            std.process.exit(1);
+        };
         try out.flush();
-        std.process.exit(1);
+        if (code != 0) std.process.exit(code);
+        return;
+    }
+    if (std.mem.eql(u8, args[1], "genstubs")) {
+        const code = xextool.xex.pack.genstubs.run(init.io, args, out) catch |run_err| {
+            try out.print("genstubs failed: {s}\n", .{@errorName(run_err)});
+            try out.flush();
+            std.process.exit(1);
+        };
+        try out.flush();
+        if (code != 0) std.process.exit(code);
+        return;
     }
 
     var options = Options{};
@@ -165,15 +184,14 @@ pub fn main(init: std.process.Init) !void {
                 options.bounding_path = getopt.optarg.?;
                 options.xex_altered = true;
             },
-            'u' => {
-                try out.print("Error: -u is not implemented yet\n", .{});
-                try out.flush();
-                std.process.exit(1);
-            },
+            'u' => options.update_patches = true,
             's' => {
-                try out.print("Error: -s is not implemented yet\n", .{});
-                try out.flush();
-                std.process.exit(1);
+                options.special_patches = true;
+                const arg = getopt.optarg.?;
+                options.special_patch_num = if (arg.len > 1 and arg[0] == '-')
+                    ~(std.fmt.parseInt(u32, arg[1..], 16) catch 0) +% 1
+                else
+                    std.fmt.parseInt(u32, arg, 16) catch 0;
             },
             'r' => {
                 const arg = getopt.optarg.?;
@@ -201,6 +219,7 @@ pub fn main(init: std.process.Init) !void {
                 if (std.mem.indexOfScalar(u8, arg, 'l') != null) options.remove_library_limit = true;
                 if (std.mem.indexOfScalar(u8, arg, 'c') != null) options.remove_revocation = true;
                 if (std.mem.indexOfScalar(u8, arg, 'z') != null) options.remove_media_id = true;
+                if (std.mem.indexOfScalar(u8, arg, 's') != null) options.remove_discswap = true;
                 options.xex_altered = true;
             },
             'm' => {
@@ -354,6 +373,17 @@ pub fn main(init: std.process.Init) !void {
         options.xex_altered = true;
     }
 
+    if (options.update_patches) {
+        if (xextool.xex.special.doUpdatePatchFix(arena, &xex) catch false) options.xex_altered = true;
+    }
+
+    if (options.special_patches) {
+        if (options.special_patch_num == 0) try out.print("Special patches available for this file are:\n", .{});
+        if (xextool.xex.special.doSpecialPatches(arena, &xex, options.special_patch_num, out) catch false and options.special_patch_num != 0) {
+            options.xex_altered = true;
+        }
+    }
+
     if (options.add_bounding_path) {
         if (xex.bounding_path) |old| arena.free(old);
         xex.bounding_path = try arena.dupe(u8, options.bounding_path);
@@ -405,6 +435,12 @@ pub fn main(init: std.process.Init) !void {
     if (options.remove_media_id) {
         xex.media_id = .{};
         try out.print("  removed media id limit\n", .{});
+    }
+    if (options.remove_discswap) {
+        if (xextool.xex.special.doDiscSwapChecksFix(arena, &xex) catch false) {
+            try out.print("  removed discswap checks\n", .{});
+            options.xex_altered = true;
+        }
     }
     if (options.force_devkit) xex.is_debug = true;
     if (options.force_retail) xex.is_debug = false;
