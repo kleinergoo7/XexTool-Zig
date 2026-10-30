@@ -593,14 +593,14 @@ test "parseShortImport reads ordinal, type, symbol and DLL" {
     try testing.expect(parseShortImport(&no_nul) == null);
 }
 
-test "buildOrdinalIndex resolves libraries and keeps first definition" {
+test "buildOrdinalIndex resolves libraries across archives" {
     const gpa = testing.allocator;
 
     const first_import = try buildShortImport(gpa, "TestFunc", "", 0x200, 0);
     defer gpa.free(first_import);
     const first_data = try buildShortImport(gpa, "TestData", "xam.xex@extra", 0x111, 1);
     defer gpa.free(first_data);
-    const duplicate_import = try buildShortImport(gpa, "TestFunc", "xam.xex", 0x999, 0);
+    const duplicate_import = try buildShortImport(gpa, "OtherFunc", "xam.xex", 0x999, 0);
     defer gpa.free(duplicate_import);
     const machine_member = try gpa.alloc(u8, 24);
     defer gpa.free(machine_member);
@@ -637,6 +637,10 @@ test "buildOrdinalIndex resolves libraries and keeps first definition" {
     try testing.expectEqualStrings("xboxkrnl.exe", function.module);
     try testing.expectEqual(@as(u32, 0x200), function.ordinal);
     try testing.expect(!function.is_var);
+
+    const other = index.map.get("OtherFunc").?;
+    try testing.expectEqualStrings("xam.xex", other.module);
+    try testing.expectEqual(@as(u32, 0x999), other.ordinal);
 
     const data_import = index.map.get("TestData").?;
     try testing.expectEqualStrings("xam.xex", data_import.module);
