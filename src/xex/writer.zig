@@ -11,11 +11,14 @@ const endian = @import("../core/endian.zig");
 const header_writer = @import("header_writer.zig");
 const model = @import("model.zig");
 const packer = @import("packer.zig");
+const Keys = @import("keys.zig").Keys;
+
+const test_keys = Keys.uniform(@splat(0x5A));
 
 pub const Error = header_writer.Error || packer.Error || error{BasefileTooLarge};
 
 /// Serializes the whole XEX into `out`.
-pub fn write(xex: *model.Xex, out: *DataBlock) Error!void {
+pub fn write(xex: *model.Xex, out: *DataBlock, keys: Keys) Error!void {
     const gpa = xex.gpa;
 
     var basefile = DataBlock.init();
@@ -26,7 +29,7 @@ pub fn write(xex: *model.Xex, out: *DataBlock) Error!void {
 
     var headers = DataBlock.init();
     defer headers.deinit(gpa);
-    try header_writer.writeHeaders(xex, &headers, basefile_format);
+    try header_writer.writeHeaders(xex, &headers, basefile_format, keys);
 
     const header_size = headers.size();
     const basefile_size = basefile.size();
@@ -47,10 +50,10 @@ pub fn write(xex: *model.Xex, out: *DataBlock) Error!void {
 }
 
 /// `XexWriter::write(const Xex&, const char*)`.
-pub fn writeFile(xex: *model.Xex, io: std.Io, path: []const u8) !void {
+pub fn writeFile(xex: *model.Xex, io: std.Io, path: []const u8, keys: Keys) !void {
     var output = DataBlock.init();
     defer output.deinit(xex.gpa);
-    try write(xex, &output);
+    try write(xex, &output, keys);
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = output.data() });
 }
 
@@ -131,7 +134,7 @@ test "write: raw image round-trips through the reader" {
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output);
+    try write(&xex, &output, test_keys);
 
     const header_size: usize = endian.get32be(output.data(), 0x08);
     try std.testing.expectEqual(@as(usize, 0x1000), header_size);
@@ -143,7 +146,7 @@ test "write: raw image round-trips through the reader" {
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, output.data()));
+    try std.testing.expect(try reader.readBytes(&parsed, output.data(), test_keys));
     try std.testing.expect(parsed.is_raw);
     try std.testing.expect(parsed.is_debug);
     try std.testing.expectEqualSlices(u8, &image, parsed.basefile.data());
@@ -160,7 +163,7 @@ test "write: empty basefile emits headers only and zeroes the retail signature" 
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output);
+    try write(&xex, &output, test_keys);
 
     try std.testing.expectEqual(@as(i32, 0x1000), output.size());
     const sec_offset: usize = endian.get32be(output.data(), 0x10);
@@ -171,7 +174,7 @@ test "write: empty basefile emits headers only and zeroes the retail signature" 
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, output.data()));
+    try std.testing.expect(try reader.readBytes(&parsed, output.data(), test_keys));
     try std.testing.expect(!parsed.is_debug);
     // Binary and raw both use compType 1; the reader reports raw.
     try std.testing.expect(parsed.is_raw);
@@ -193,11 +196,11 @@ test "write: boolean flag words survive a binary round-trip" {
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output);
+    try write(&xex, &output, test_keys);
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, output.data()));
+    try std.testing.expect(try reader.readBytes(&parsed, output.data(), test_keys));
     try std.testing.expectEqual(xex.image_flags, parsed.image_flags);
     try std.testing.expectEqual(xex.media_types, parsed.media_types);
     try std.testing.expectEqual(xex.regions, parsed.regions);
@@ -214,7 +217,7 @@ test "writeFile: writes the same bytes as write" {
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output);
+    try write(&xex, &output, test_keys);
 
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();

@@ -8,6 +8,7 @@ const endian = @import("../core/endian.zig");
 const crypto = @import("../xecrypt/xecrypt.zig");
 const data = @import("data.zig");
 const defines = @import("defines.zig");
+const Keys = @import("keys.zig").Keys;
 const model = @import("model.zig");
 const types = @import("types.zig");
 
@@ -26,7 +27,7 @@ const image_header_size = 0x18;
 const image_entry_size = 0x8;
 const security_info_size = 0x184;
 
-pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
+pub fn readHeaders(xex: *model.Xex, headers: DataBlock, keys: Keys) Error!i32 {
     const bytes = headers.data();
     if (bytes.len < image_header_size) return error.OutOfBounds;
     if (!std.mem.eql(u8, bytes[0..4], &defines.xex_magic)) return error.InvalidMagic;
@@ -106,10 +107,7 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
     var sec_info = try parseSecurityInfo(sec);
     const is_mfg = (sec_info.image_info.image_flags & (defines.image_flag_manufacturing_utility | defines.image_flag_manufacturing_tool)) != 0;
     if (!xex.isPatchModule()) {
-        const key = if (is_mfg)
-            (if (xex.is_debug) data.xex_mfg_debug_key else data.xex_mfg_retail_key)
-        else
-            (if (xex.is_debug) data.xex_debug_key else data.xex_retail_key);
+        const key = keys.select(xex.is_debug, is_mfg);
         var image_key = sec_info.image_info.image_key;
         try decryptImageKey(xex, &image_key, &key);
         sec_info.image_info.image_key = image_key;
@@ -460,6 +458,8 @@ fn parseAltTitleIds(xex: *model.Xex, raw: []const u8, info_size: i32) Error!void
     }
 }
 
+const test_keys = Keys.uniform(@splat(0x5A));
+
 test "readHeaders: parses a minimal unsigned XEX header tree" {
     var headers: [0x298]u8 = @splat(0);
     @memcpy(headers[0..4], &defines.xex_magic);
@@ -497,7 +497,7 @@ test "readHeaders: parses a minimal unsigned XEX header tree" {
 
     var xex = model.Xex.init(std.testing.allocator);
     defer xex.deinit();
-    const image_size = try readHeaders(&xex, block);
+    const image_size = try readHeaders(&xex, block, test_keys);
 
     try std.testing.expectEqual(@as(i32, 0x10000), image_size);
     try std.testing.expect(xex.isTitleModule());

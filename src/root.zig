@@ -12,6 +12,7 @@ pub const xex = struct {
     pub const types = @import("xex/types.zig");
     pub const model = @import("xex/model.zig");
     pub const data = @import("xex/data.zig");
+    pub const keys = @import("xex/keys.zig");
     pub const header = @import("xex/header.zig");
     pub const pe = @import("xex/pe.zig");
     pub const packer = @import("xex/packer.zig");

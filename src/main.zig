@@ -8,6 +8,7 @@ const text = xextool.text;
 const getopt_mod = xextool.getopt;
 const usage = @import("cli/usage.zig").usage;
 const defines = xextool.xex.defines;
+const default_keys = @import("cli/default_keys.zig").keys;
 
 const title = build_options.title;
 
@@ -293,7 +294,7 @@ pub fn main(init: std.process.Init) !void {
     if (!options.xml_output) {
         try out.print("Reading and parsing input xex file...\n", .{});
     }
-    if (!(xextool.xex.reader.readFile(&xex, init.io, options.xex_filename) catch false)) {
+    if (!(xextool.xex.reader.readFile(&xex, init.io, options.xex_filename, default_keys) catch false)) {
         try out.print("Error reading xex file {s}\n", .{options.xex_filename});
         if (xex.is_delta_compressed) {
             try out.print("\"{s}\" is a delta compressed patch file\nIt's contents only make sense when used with the required xex file!\n\n", .{options.xex_filename});
@@ -346,7 +347,7 @@ pub fn main(init: std.process.Init) !void {
     if (options.xexp_patch) {
         var patch_xex = xextool.xex.model.Xex.init(arena);
         defer patch_xex.deinit();
-        const patch_read = xextool.xex.reader.readFile(&patch_xex, init.io, options.xexp_filename) catch false;
+        const patch_read = xextool.xex.reader.readFile(&patch_xex, init.io, options.xexp_filename, default_keys) catch false;
         if (!patch_read) {
             try out.print("Error reading patch file {s}\n", .{options.xexp_filename});
             try out.flush();
@@ -367,7 +368,7 @@ pub fn main(init: std.process.Init) !void {
             try out.flush();
             std.process.exit(3);
         }
-        const patched = xextool.xex.patcher.patch(arena, &xex, &patch_xex, out) catch {
+        const patched = xextool.xex.patcher.patch(arena, &xex, &patch_xex, out, default_keys) catch {
             try out.print("Error patching {s} with {s}\n", .{ options.xex_filename, options.xexp_filename });
             try out.flush();
             std.process.exit(3);
@@ -496,7 +497,7 @@ pub fn main(init: std.process.Init) !void {
     if (options.xex_altered) {
         const filename = if (options.output_new_exe) options.out_filename else options.xex_filename;
         try out.print("Creating and writing output xex file...\n", .{});
-        xextool.xex.writer.writeFile(&xex, init.io, filename) catch {
+        xextool.xex.writer.writeFile(&xex, init.io, filename, default_keys) catch {
             try out.print("Error writing altered xex to {s}\n", .{filename});
             try out.flush();
             std.process.exit(1);
@@ -564,7 +565,7 @@ fn runApplyXml(init: std.process.Init, args: []const []const u8, out: anytype) !
 
     var xex = xextool.xex.model.Xex.init(init.arena.allocator());
     defer xex.deinit();
-    const read_ok = xextool.xex.reader.readFile(&xex, init.io, input) catch false;
+    const read_ok = xextool.xex.reader.readFile(&xex, init.io, input, default_keys) catch false;
     if (!read_ok) {
         try out.print("applyxml: failed to read {s}\n", .{input});
         try out.flush();
@@ -577,7 +578,7 @@ fn runApplyXml(init: std.process.Init, args: []const []const u8, out: anytype) !
         std.process.exit(1);
     };
 
-    xextool.xex.writer.writeFile(&xex, init.io, output_path) catch {
+    xextool.xex.writer.writeFile(&xex, init.io, output_path, default_keys) catch {
         try out.print("applyxml: failed to write {s}\n", .{output_path});
         try out.flush();
         std.process.exit(1);

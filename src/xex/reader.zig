@@ -7,6 +7,7 @@ const cursor = @import("../core/cursor.zig");
 const header = @import("header.zig");
 const model = @import("model.zig");
 const packer = @import("packer.zig");
+const Keys = @import("keys.zig").Keys;
 
 pub const Error = error{
     InvalidRange,
@@ -23,13 +24,13 @@ pub const Error = error{
     LzxFailed,
 };
 
-pub fn readFile(xex: *model.Xex, io: std.Io, path: []const u8) !bool {
+pub fn readFile(xex: *model.Xex, io: std.Io, path: []const u8, keys: Keys) !bool {
     const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, xex.gpa, .limited(1 << 40));
     defer xex.gpa.free(bytes);
-    return readBytes(xex, bytes);
+    return readBytes(xex, bytes, keys);
 }
 
-pub fn readBytes(xex: *model.Xex, bytes: []const u8) Error!bool {
+pub fn readBytes(xex: *model.Xex, bytes: []const u8, keys: Keys) Error!bool {
     if (bytes.len < 0x18) return error.OutOfBounds;
     if (!std.mem.eql(u8, bytes[0..4], &@import("defines.zig").xex_magic)) return error.InvalidMagic;
 
@@ -45,7 +46,7 @@ pub fn readBytes(xex: *model.Xex, bytes: []const u8) Error!bool {
     var basefile_format = DataBlock.init();
     defer basefile_format.deinit(xex.gpa);
 
-    const image_size = try header.readHeaders(xex, headers);
+    const image_size = try header.readHeaders(xex, headers, keys);
     basefile_format = try xex.basefile_format.clone(xex.gpa);
 
     const basefile_size = bytes.len - headers_size;

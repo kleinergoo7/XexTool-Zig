@@ -10,7 +10,8 @@ const std = @import("std");
 const DataBlock = @import("../core/datablock.zig").DataBlock;
 const endian = @import("../core/endian.zig");
 const crypto = @import("../xecrypt/xecrypt.zig");
-const keys = @import("data.zig");
+const data = @import("data.zig");
+const Keys = @import("keys.zig").Keys;
 const defines = @import("defines.zig");
 const model = @import("model.zig");
 const types = @import("types.zig");
@@ -245,7 +246,7 @@ pub fn getImageEntryDataSize(xex: *const model.Xex, basefile_format: DataBlock) 
 }
 
 /// XexWriter::getSecurityInfo: fills the native-endian security info fields.
-pub fn getSecurityInfo(xex: *const model.Xex, sec: *types.SecurityInfo) Error!void {
+pub fn getSecurityInfo(xex: *const model.Xex, sec: *types.SecurityInfo, keys: Keys) Error!void {
     if (xex.sections.items.len > std.math.maxInt(i32)) return error.HeaderSizeOverflow;
     if (xex.import_libraries.items.len > std.math.maxInt(i32)) return error.HeaderSizeOverflow;
 
@@ -260,7 +261,7 @@ pub fn getSecurityInfo(xex: *const model.Xex, sec: *types.SecurityInfo) Error!vo
     sec.image_info.import_table_count = @intCast(xex.import_libraries.items.len);
     sec.image_info.media_id = xex.media_id;
     sec.image_info.image_key = xex.image_key;
-    try encryptImageKey(xex, &sec.image_info.image_key);
+    try encryptImageKey(xex, &sec.image_info.image_key, keys);
     sec.image_info.export_table_address = xex.export_table_address;
     sec.image_info.game_region = rebuildRegions(xex.regions);
     sec.allowed_media_types = rebuildMedia(xex.media_types);
@@ -423,11 +424,11 @@ fn rebuildMedia(media: u32) u32 {
     return flags | (media & defines.media_unknown);
 }
 
-fn encryptImageKey(xex: *const model.Xex, key: *types.Key) Error!void {
-    const crypt_key = if (xex.isManufacturingSupportTool() or xex.isManufacturingUtility())
-        (if (xex.is_debug) keys.xex_mfg_debug_key else keys.xex_mfg_retail_key)
-    else
-        (if (xex.is_debug) keys.xex_debug_key else keys.xex_retail_key);
+fn encryptImageKey(xex: *const model.Xex, key: *types.Key, keys: Keys) Error!void {
+    const crypt_key = keys.select(
+        xex.is_debug,
+        xex.isManufacturingSupportTool() or xex.isManufacturingUtility(),
+    );
     encryptKey(key, &crypt_key);
 }
 
@@ -441,9 +442,9 @@ fn encryptKey(key: *types.Key, crypt_key: []const u8) void {
 
 /// Writes the security info block in big-endian form, leaving the hashes and
 /// the signature zeroed for the update passes.
-fn writeSecurityInfo(xex: *const model.Xex, out: []u8) Error!void {
+fn writeSecurityInfo(xex: *const model.Xex, out: []u8, keys: Keys) Error!void {
     var info: types.SecurityInfo = .{};
-    try getSecurityInfo(xex, &info);
+    try getSecurityInfo(xex, &info, keys);
     @memset(out, 0);
     endian.set32be(out, sec_size, @bitCast(info.size));
     endian.set32be(out, sec_image_size, @bitCast(info.image_size));
@@ -465,7 +466,7 @@ fn writeSecurityInfo(xex: *const model.Xex, out: []u8) Error!void {
 
 /// XexHeader::writeHeaders: builds the complete header area, hashes it and
 /// signs it when the model is a debug image.
-pub fn writeHeaders(xex: *const model.Xex, headers: *DataBlock, basefile_format: DataBlock) Error!void {
+pub fn writeHeaders(xex: *const model.Xex, headers: *DataBlock, basefile_format: DataBlock, keys: Keys) Error!void {
     const num_entries = getNumImageEntries(xex);
     const entry_data_size = try getImageEntryDataSize(xex, basefile_format);
     const section_count = try toI32(xex.sections.items.len);
@@ -493,7 +494,7 @@ pub fn writeHeaders(xex: *const model.Xex, headers: *DataBlock, basefile_format:
     endian.set32be(buffer, header_entry_count, @bitCast(num_entries));
 
     const sec_start: usize = @intCast(sec_info_offset);
-    try writeSecurityInfo(xex, buffer[sec_start..][0..security_info_size]);
+    try writeSecurityInfo(xex, buffer[sec_start..][0..security_info_size], keys);
 
     for (xex.sections.items, 0..) |section, index| {
         if (section.size < 0) return error.InvalidSectionLayout;
@@ -1241,7 +1242,7 @@ pub fn updateSign(
     var hash: [20]u8 = undefined;
     crypto.XeCryptRotSumSha(sec[hash_start..][0..hash_length], "", &hash, 20);
 
-    const salt = if (xex.hasRequiredRevocationCheck()) keys.xex_salt_rev[0..] else keys.xex_salt_xex[0..];
+    const salt = if (xex.hasRequiredRevocationCheck()) data.xex_salt_rev[0..] else data.xex_salt_xex[0..];
     var signature: crypto.Signature = undefined;
     @memcpy(&signature, sec[sec_signature..][0..sec_signature_size]);
     if (!crypto.XeCryptBnQwBeSigCreate(&signature, &hash, salt, public_key)) {
@@ -1259,7 +1260,7 @@ pub fn updateSign(
 
 /// XexHeader::updateDebugSign.
 pub fn updateDebugSign(xex: *const model.Xex, sec: []u8) Error!void {
-    return updateSign(xex, sec, &keys.xex_debug_public_key, &keys.xex_debug_private_key);
+    return updateSign(xex, sec, &data.xex_debug_public_key, &data.xex_debug_private_key);
 }
 
 // ---------------------------------------------------------------------------
@@ -1267,6 +1268,7 @@ pub fn updateDebugSign(xex: *const model.Xex, sec: []u8) Error!void {
 // ---------------------------------------------------------------------------
 
 const reader = @import("reader.zig");
+const test_keys = Keys.uniform(@splat(0x5A));
 
 fn baseFormat(gpa: std.mem.Allocator) !DataBlock {
     var format = DataBlock.init();
@@ -1323,7 +1325,7 @@ test "writeHeaders: minimal raw XEX is parseable" {
 
     var headers = DataBlock.init();
     defer headers.deinit(gpa);
-    try writeHeaders(&xex, &headers, format);
+    try writeHeaders(&xex, &headers, format, test_keys);
 
     const bytes = headers.data();
     try std.testing.expectEqual(@as(i32, 0x1000), headers.size());
@@ -1368,7 +1370,7 @@ test "writeHeaders: minimal raw XEX is parseable" {
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, bytes));
+    try std.testing.expect(try reader.readBytes(&parsed, bytes, test_keys));
     try std.testing.expect(parsed.is_raw);
     try std.testing.expect(!parsed.is_debug);
     try std.testing.expectEqual(@as(u32, 0x101), parsed.module_flags);
@@ -1389,7 +1391,7 @@ test "writeHeaders: debug signature matches the reference signing path" {
 
     var headers = DataBlock.init();
     defer headers.deinit(gpa);
-    try writeHeaders(&xex, &headers, format);
+    try writeHeaders(&xex, &headers, format, test_keys);
 
     const bytes = headers.data();
     const sec_offset: usize = endian.get32be(bytes, header_security_offset);
@@ -1415,21 +1417,21 @@ test "writeHeaders: debug signature matches the reference signing path" {
     try std.testing.expect(crypto.XeCryptBnQwBeSigCreate(
         &expected,
         &hash,
-        &keys.xex_salt_rev,
-        &keys.xex_debug_public_key,
+        &data.xex_salt_rev,
+        &data.xex_debug_public_key,
     ));
     try std.testing.expect(crypto.XeCryptBnQwNeModExp(
         &expected,
         &expected,
-        keys.xex_debug_private_key[0x390..],
-        keys.xex_debug_private_key[0x10..],
+        data.xex_debug_private_key[0x390..],
+        data.xex_debug_private_key[0x10..],
         0x20,
     ));
     try std.testing.expectEqualSlices(u8, signature, &expected);
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, bytes));
+    try std.testing.expect(try reader.readBytes(&parsed, bytes, test_keys));
     try std.testing.expect(parsed.is_debug);
 }
 
@@ -1513,7 +1515,7 @@ test "writeHeaders: entry order, import tail placement and section hashes" {
 
     var headers = DataBlock.init();
     defer headers.deinit(gpa);
-    try writeHeaders(&xex, &headers, format);
+    try writeHeaders(&xex, &headers, format, test_keys);
 
     const bytes = headers.data();
     const expected_keys = [_]u32{
@@ -1608,7 +1610,7 @@ test "writeHeaders: entry order, import tail placement and section hashes" {
     // Round-trip through the reader.
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, bytes));
+    try std.testing.expect(try reader.readBytes(&parsed, bytes, test_keys));
     try std.testing.expect(parsed.is_debug);
     try std.testing.expectEqual(@as(usize, 1), parsed.resources.items.len);
     try std.testing.expectEqualSlices(u8, &[_]u8{ 'R', 'E', 'S', 'X', 0, 0, 0, 0 }, &parsed.resources.items[0].name);
@@ -1649,7 +1651,7 @@ test "writeHeaders: patched XEX has no security gap and uses 0x800 alignment" {
 
     var headers = DataBlock.init();
     defer headers.deinit(gpa);
-    try writeHeaders(&xex, &headers, format);
+    try writeHeaders(&xex, &headers, format, test_keys);
 
     const bytes = headers.data();
     // 0x18 + 1 entry, no gap, security info at 0x20.
@@ -1678,10 +1680,10 @@ test "write file round-trips a fixture when XEXTOOL_TEST_DIR is set" {
 
     var xex = model.Xex.init(gpa);
     defer xex.deinit();
-    try std.testing.expect(try reader.readBytes(&xex, input));
+    try std.testing.expect(try reader.readBytes(&xex, input, test_keys));
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try @import("writer.zig").write(&xex, &output);
+    try @import("writer.zig").write(&xex, &output, test_keys);
     try std.testing.expectEqualSlices(u8, input, output.data());
 }
