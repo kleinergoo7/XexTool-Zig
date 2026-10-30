@@ -1253,6 +1253,51 @@ test "calc decompress size walks the little endian headers" {
     try std.testing.expectError(error.LzxInvalidData, calcDecompressSize(&short_src));
 }
 
+test "translate e8 rewrites a forward call offset" {
+    const allocator = std.testing.allocator;
+    const decoder = try createDecompressionWindow(allocator, 0x8000);
+    defer destroyDecompression(decoder);
+
+    var mem: [16]u8 = @splat(0);
+    mem[0] = 0xE8;
+    mem[1] = 0x10;
+
+    decoder.current_file_size = 0x1000;
+    decoder.instr_pos = 0;
+    try translateE8(decoder, &mem, mem.len);
+
+    // absolute (0x10) < file size: the relative offset replaces the field.
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 0xE8, 0x10, 0, 0, 0 }, mem[0..5]);
+    // The last six bytes are restored and the instruction pointer jumps to
+    // end_instr_pos + 10.
+    const restored: [6]u8 = @splat(0);
+    try std.testing.expectEqualSlices(u8, &restored, mem[10..16]);
+    try std.testing.expectEqual(@as(u32, 16), decoder.instr_pos);
+}
+
+test "translate e8 rewrites a backward call offset" {
+    const allocator = std.testing.allocator;
+    const decoder = try createDecompressionWindow(allocator, 0x8000);
+    defer destroyDecompression(decoder);
+
+    var mem: [32]u8 = @splat(0);
+    mem[16] = 0xE8;
+    // 0xFFFFFFF0 is -16 as a signed 32 bit relative call.
+    mem[17] = 0xF0;
+    mem[18] = 0xFF;
+    mem[19] = 0xFF;
+    mem[20] = 0xFF;
+
+    decoder.current_file_size = 0x1000;
+    decoder.instr_pos = 0;
+    try translateE8(decoder, &mem, mem.len);
+
+    // absolute is negative and -absolute (16) <= instr_pos (16), so the stored
+    // offset becomes absolute + current_file_size = 0xFF0.
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 0xE8, 0xF0, 0x0F, 0, 0 }, mem[16..21]);
+    try std.testing.expectEqual(@as(u32, 32), decoder.instr_pos);
+}
+
 test "make table decodes a single symbol with a zero length code" {
     var bitlen: [4]u8 = @splat(0);
     var table: [1 << 8]i16 = undefined;

@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: 2026 XexTool Zig rewrite contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// These tests are adapted from tinyxml2 11.0.0 by Lee Thomason
+// (zlib license); see tinyxml2.zig for the retained original notice.
 
 //! Representative tests ported from tinyxml2's `xmltest.cpp`, plus golden
 //! parse/print checks against the shipped resources.

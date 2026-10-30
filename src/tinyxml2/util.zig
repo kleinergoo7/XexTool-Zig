@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: 2026 XexTool Zig rewrite contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of the Zig port of tinyxml2 11.0.0 by Lee Thomason
+// (zlib license); see tinyxml2.zig for the retained original notice.
 
 //! Utility layer of the tinyxml2 port: error ids, string normalization,
 //! numeric conversions, and float formatting.
