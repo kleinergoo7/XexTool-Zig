@@ -21,6 +21,7 @@ pub const xex = struct {
     pub const infoget = @import("xex/infoget.zig");
     pub const gameinfo = @import("xex/gameinfo.zig");
     pub const idc = @import("xex/idc.zig");
+    pub const applyxml = @import("xex/applyxml.zig");
 };
 
 test {

@@ -24,4 +24,5 @@ test {
     std.testing.refAllDecls(@import("xex/xmlout.zig"));
     std.testing.refAllDecls(@import("xex/gameinfo.zig"));
     std.testing.refAllDecls(@import("xex/idc.zig"));
+    std.testing.refAllDecls(@import("xex/applyxml.zig"));
 }

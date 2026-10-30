@@ -637,6 +637,7 @@ fn decodeMainTree(self: *Decoder) Error!i32 {
 
     if (self.input_curpos >= self.end_input_pos) return error.LzxFailed;
 
+    // makeTable only stores canonical code lengths in 0..16, so this fits u5.
     const bits: u5 = @intCast(self.main_tree_len[@intCast(j)]);
     self.bitbuf <<= bits;
     self.bitcount -= @as(i8, @intCast(bits));

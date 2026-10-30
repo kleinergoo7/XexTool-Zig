@@ -636,7 +636,7 @@ fn countLen(self: *Encoder, i: i32) void {
     }
 }
 
-fn makeLen(self: *Encoder, root: i32, len: []u8, code: []const u16) void {
+fn makeLen(self: *Encoder, root: i32, len: []u8, code: []const u16) Error!void {
     @memset(self.tree_len_cnt[0..], 0);
     countLen(self, root);
 
@@ -663,7 +663,9 @@ fn makeLen(self: *Encoder, root: i32, len: []u8, code: []const u16) void {
     while (i > 0) : (i -= 1) {
         var k: u16 = self.tree_len_cnt[@intCast(i)];
         while (k > 0) : (k -= 1) {
-            if (self.tree_sortptr >= code.len) return;
+            // Every leaf writes one length; the sort list holds exactly the
+            // leaves makeTree2 pushed, so this bound is an invariant check.
+            if (self.tree_sortptr >= code.len) return error.LzxFailed;
             len[code[self.tree_sortptr]] = @intCast(i);
             self.tree_sortptr += 1;
         }
@@ -679,6 +681,7 @@ fn makeCode(self: *Encoder, n: u32, len: []const u8, code: []u16) void {
 
     i = 0;
     while (i < n) : (i += 1) {
+        // makeLen writes canonical lengths 1..16, so the start table index fits.
         const l = len[i];
         code[i] = start[l];
         start[l] +%= 1;
@@ -726,7 +729,7 @@ fn makeTree2(self: *Encoder, avail_in: u32, freq: []u16, code: []u16, len: []u8)
     }
 
     self.tree_sortptr = 0;
-    makeLen(self, @intCast(k), len, code);
+    try makeLen(self, @intCast(k), len, code);
 }
 
 fn makeTree(self: *Encoder, nparm: u32, freq: []u16, len: []u8, code: []u16, make_codes: bool) Error!void {
