@@ -458,7 +458,9 @@ fn parseAltTitleIds(xex: *model.Xex, raw: []const u8, info_size: i32) Error!void
     }
 }
 
-const test_keys = Keys.uniform(@splat(0x5A));
+fn testKeys() Keys {
+    return Keys.uniform(@splat(0x5A));
+}
 
 test "readHeaders: parses a minimal unsigned XEX header tree" {
     var headers: [0x298]u8 = @splat(0);
@@ -497,7 +499,7 @@ test "readHeaders: parses a minimal unsigned XEX header tree" {
 
     var xex = model.Xex.init(std.testing.allocator);
     defer xex.deinit();
-    const image_size = try readHeaders(&xex, block, test_keys);
+    const image_size = try readHeaders(&xex, block, testKeys());
 
     try std.testing.expectEqual(@as(i32, 0x10000), image_size);
     try std.testing.expect(xex.isTitleModule());

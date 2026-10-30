@@ -10,6 +10,10 @@ pub const Keys = struct {
     mfg_retail: [16]u8,
     debug: [16]u8,
     mfg_debug: [16]u8,
+    /// Devkit signing key blob, in the reference layout. `null` disables
+    /// debug-image signing, so a caller that never writes debug images does
+    /// not need it.
+    debug_signing: ?[]const u8 = null,
 
     /// Uses one key for every slot. Correct for retail images; a debug image
     /// needs its own key in `debug`.

@@ -27,4 +27,5 @@ pub const keys = Keys{
     .mfg_retail = xex_mfg_retail_key,
     .debug = xex_debug_key,
     .mfg_debug = xex_mfg_debug_key,
+    .debug_signing = &@import("xextool").xex.data.xex_debug_private_key,
 };

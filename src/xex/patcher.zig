@@ -14,7 +14,11 @@ const XexLzx = @import("../lzx/XexLzx.zig");
 const header = @import("header.zig");
 const model = @import("model.zig");
 const Keys = @import("keys.zig").Keys;
-const test_keys = Keys.uniform(@splat(0x5A));
+fn testKeys() Keys {
+    var keys = Keys.uniform(@splat(0x5A));
+    keys.debug_signing = &@import("data.zig").xex_debug_private_key;
+    return keys;
+}
 
 pub const Error = header.Error || error{
     NotAPatchModule,
@@ -743,7 +747,7 @@ test "patch rebuilds headers and basefile from a delta patch module" {
     const target_key_plain: [16]u8 = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
     const patch_key_plain: [16]u8 = .{ 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 };
 
-    const headers = buildTestHeaders(encryptKey(test_keys.debug, target_key_plain));
+    const headers = buildTestHeaders(encryptKey(testKeys().debug, target_key_plain));
 
     var source = model.Xex.init(gpa);
     defer source.deinit();
@@ -797,7 +801,7 @@ test "patch rebuilds headers and basefile from a delta patch module" {
     var buffer: std.Io.Writer.Allocating = .init(gpa);
     defer buffer.deinit();
 
-    var output = try patch(gpa, &source, &patch_xex, &buffer.writer, test_keys);
+    var output = try patch(gpa, &source, &patch_xex, &buffer.writer, testKeys());
     defer output.deinit();
 
     try std.testing.expectEqualStrings("", buffer.written());
@@ -826,14 +830,14 @@ test "patch rejects non-patch inputs and a wrong source hash" {
     var buffer: std.Io.Writer.Allocating = .init(gpa);
     defer buffer.deinit();
 
-    try std.testing.expectError(error.NotAPatchModule, patch(gpa, &source, &patch_xex, &buffer.writer, test_keys));
+    try std.testing.expectError(error.NotAPatchModule, patch(gpa, &source, &patch_xex, &buffer.writer, testKeys()));
 
     patch_xex.module_flags = defines.module_flag_patch_module | defines.module_flag_patch_delta;
     source.module_flags = defines.module_flag_patch_module;
-    try std.testing.expectError(error.SourceIsPatchModule, patch(gpa, &source, &patch_xex, &buffer.writer, test_keys));
+    try std.testing.expectError(error.SourceIsPatchModule, patch(gpa, &source, &patch_xex, &buffer.writer, testKeys()));
 
     source.module_flags = defines.module_flag_title_module;
-    try std.testing.expectError(error.IncorrectPatch, patch(gpa, &source, &patch_xex, &buffer.writer, test_keys));
+    try std.testing.expectError(error.IncorrectPatch, patch(gpa, &source, &patch_xex, &buffer.writer, testKeys()));
 
     var headers: [0x300]u8 = @splat(0);
     endian.set32be(&headers, image_header_security_offset, 0x100);
@@ -842,6 +846,6 @@ test "patch rejects non-patch inputs and a wrong source hash" {
     var descriptor = try buildDescriptor(gpa, @splat(0), 0, 0, 0, 0, "");
     defer descriptor.deinit(gpa);
     patch_xex.delta_patch_descriptor = try descriptor.clone(gpa);
-    try std.testing.expectError(error.IncorrectPatch, patch(gpa, &source, &patch_xex, &buffer.writer, test_keys));
+    try std.testing.expectError(error.IncorrectPatch, patch(gpa, &source, &patch_xex, &buffer.writer, testKeys()));
     try std.testing.expectEqualStrings("", buffer.written());
 }

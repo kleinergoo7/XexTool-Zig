@@ -13,7 +13,11 @@ const model = @import("model.zig");
 const packer = @import("packer.zig");
 const Keys = @import("keys.zig").Keys;
 
-const test_keys = Keys.uniform(@splat(0x5A));
+fn testKeys() Keys {
+    var keys = Keys.uniform(@splat(0x5A));
+    keys.debug_signing = &@import("data.zig").xex_debug_private_key;
+    return keys;
+}
 
 pub const Error = header_writer.Error || packer.Error || error{BasefileTooLarge};
 
@@ -134,7 +138,7 @@ test "write: raw image round-trips through the reader" {
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output, test_keys);
+    try write(&xex, &output, testKeys());
 
     const header_size: usize = endian.get32be(output.data(), 0x08);
     try std.testing.expectEqual(@as(usize, 0x1000), header_size);
@@ -146,7 +150,7 @@ test "write: raw image round-trips through the reader" {
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, output.data(), test_keys));
+    try std.testing.expect(try reader.readBytes(&parsed, output.data(), testKeys()));
     try std.testing.expect(parsed.is_raw);
     try std.testing.expect(parsed.is_debug);
     try std.testing.expectEqualSlices(u8, &image, parsed.basefile.data());
@@ -163,7 +167,7 @@ test "write: empty basefile emits headers only and zeroes the retail signature" 
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output, test_keys);
+    try write(&xex, &output, testKeys());
 
     try std.testing.expectEqual(@as(i32, 0x1000), output.size());
     const sec_offset: usize = endian.get32be(output.data(), 0x10);
@@ -174,7 +178,7 @@ test "write: empty basefile emits headers only and zeroes the retail signature" 
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, output.data(), test_keys));
+    try std.testing.expect(try reader.readBytes(&parsed, output.data(), testKeys()));
     try std.testing.expect(!parsed.is_debug);
     // Binary and raw both use compType 1; the reader reports raw.
     try std.testing.expect(parsed.is_raw);
@@ -196,11 +200,11 @@ test "write: boolean flag words survive a binary round-trip" {
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output, test_keys);
+    try write(&xex, &output, testKeys());
 
     var parsed = model.Xex.init(gpa);
     defer parsed.deinit();
-    try std.testing.expect(try reader.readBytes(&parsed, output.data(), test_keys));
+    try std.testing.expect(try reader.readBytes(&parsed, output.data(), testKeys()));
     try std.testing.expectEqual(xex.image_flags, parsed.image_flags);
     try std.testing.expectEqual(xex.media_types, parsed.media_types);
     try std.testing.expectEqual(xex.regions, parsed.regions);
@@ -217,7 +221,7 @@ test "writeFile: writes the same bytes as write" {
 
     var output = DataBlock.init();
     defer output.deinit(gpa);
-    try write(&xex, &output, test_keys);
+    try write(&xex, &output, testKeys());
 
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
