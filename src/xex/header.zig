@@ -95,7 +95,14 @@ pub fn readHeaders(xex: *model.Xex, headers: DataBlock) Error!i32 {
             break;
         }
     }
-    xex.is_debug = !retail_valid and !all_zero;
+    const debug_valid = if (!retail_valid and !all_zero)
+        crypto.XeCryptBnQwBeSigVerify(signature, &hash, salt, &data.xex_debug_public_key)
+    else
+        false;
+    // Prefer the retail interpretation when neither signature check succeeds;
+    // this matches the reference's all-zero fallback and avoids mislabelling
+    // retail files whose signature scheme this verifier cannot reproduce.
+    xex.is_debug = !retail_valid and !all_zero and debug_valid;
 
     var sec_info = try parseSecurityInfo(sec);
     const is_mfg = (sec_info.image_info.image_flags & (defines.image_flag_manufacturing_utility | defines.image_flag_manufacturing_tool)) != 0;

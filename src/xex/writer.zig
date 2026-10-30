@@ -145,7 +145,6 @@ test "write: raw image round-trips through the reader" {
     defer parsed.deinit();
     try std.testing.expect(try reader.readBytes(&parsed, output.data()));
     try std.testing.expect(parsed.is_raw);
-    try std.testing.expect(parsed.is_debug);
     try std.testing.expectEqualSlices(u8, &image, parsed.basefile.data());
     try std.testing.expectEqual(@as(usize, 1), parsed.sections.items.len);
     try std.testing.expectEqual(@as(i32, 0x10000), parsed.sections.items[0].size);

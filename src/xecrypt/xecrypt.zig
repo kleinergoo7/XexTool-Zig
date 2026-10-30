@@ -265,15 +265,113 @@ pub fn XeCryptBnQwBeSigVerify(signature: []const u8, hash: []const u8, salt: []c
     const exp = @byteSwap(public_key.dw_pub_exp);
     if (exp != 3 and exp != 0x00010001) return false;
 
-    var expected: Signature = undefined;
-    XeCryptBnQwBeSigFormat(&expected, hash, salt);
-
     const modulus = key[0x10..][0 .. @as(usize, count) * 8];
-    var decrypted: [256]u8 = @splat(0);
-    var exponent_qw: [256]u8 = @splat(0);
-    endian.set64be(&exponent_qw, 0, exp);
-    if (!XeCryptBnQwNeModExp(&decrypted, signature[0..256], &exponent_qw, modulus, count)) return false;
-    return std.mem.eql(u8, &decrypted, &expected);
+    const mod_inv = XeCryptBnQwNeModInv(endian.get64be(modulus, 0));
+
+    var dec: [256]u8 = @splat(0);
+    var com: [256]u8 = @splat(0);
+    @memcpy(&dec, signature[0..256]);
+    @memcpy(&com, signature[0..256]);
+
+    var e = exp;
+    while (true) {
+        e >>= 1;
+        if (e == 0) break;
+        xecryptModMul(&com, &com, &com, mod_inv, modulus, count);
+    }
+    // XeCryptBnQwBeSigCompute writes the final product into pbDecSig, then
+    // formats pbComSig in place and compares the two buffers.
+    xecryptModMul(&com, &dec, &dec, mod_inv, modulus, count);
+
+    var formatted: Signature = undefined;
+    @memcpy(&formatted, &com);
+    XeCryptBnQwBeSigFormat(&formatted, hash, salt);
+    return std.mem.eql(u8, &dec, &formatted);
+}
+
+fn XeCryptBnQwNeModInv(value: u64) u64 {
+    var t1 = value *% 3;
+    var t2 = t1 ^ 2;
+    t1 = t2 *% value;
+    t1 = (~t1) +% 2;
+    var i: u64 = 5;
+    while (i < 0x20) : (i <<= 1) {
+        const t3 = t1 +% 1;
+        t2 = t3 *% t2;
+        t1 = t1 *% t1;
+    }
+    t1 +%= 1;
+    return t1 *% t2;
+}
+
+fn xecryptModMul(a: []const u8, b: []const u8, c: []u8, qw_mi: u64, m: []const u8, cqw: u32) void {
+    var buf1: [0x21]u64 = @splat(0);
+    var buf2: [0x21]u64 = @splat(0);
+    const mmi_stat = qw_mi *% endian.get64be(a, 0);
+
+    var i: u32 = 0;
+    while (i < cqw) : (i += 1) {
+        const bi = endian.get64be(b, @as(usize, i) * 8);
+        const mmi = mmi_stat *% bi +% (qw_mi *% (buf1[1] -% buf2[1]));
+        var acc1: u64 = 0;
+        var acc2: u64 = 0;
+        var j: u32 = 0;
+        while (j < cqw) : (j += 1) {
+            var product: u128 = @as(u128, bi) * @as(u128, endian.get64be(a, @as(usize, j) * 8));
+            var hi: u64 = @truncate(product >> 64);
+            var lo: u64 = @truncate(product);
+            lo +%= buf1[j + 1];
+            if (lo < buf1[j + 1]) hi +%= 1;
+            lo +%= acc1;
+            if (lo < acc1) hi +%= 1;
+            acc1 = hi;
+            buf1[j] = lo;
+
+            product = @as(u128, mmi) * @as(u128, endian.get64be(m, @as(usize, j) * 8));
+            hi = @truncate(product >> 64);
+            lo = @truncate(product);
+            lo +%= buf2[j + 1];
+            if (lo < buf2[j + 1]) hi +%= 1;
+            lo +%= acc2;
+            if (lo < acc2) hi +%= 1;
+            acc2 = hi;
+            buf2[j] = lo;
+        }
+        buf1[cqw] = acc1;
+        buf2[cqw] = acc2;
+    }
+
+    i = 0;
+    while (i < cqw) : (i += 1) {
+        const index = cqw - i;
+        if (buf1[index] > buf2[index]) {
+            var carry: u64 = 0;
+            var j: u32 = 0;
+            while (j < cqw) : (j += 1) {
+                var value = (buf1[j + 1] -% buf2[j + 1]) -% carry;
+                endian.set64be(c, @as(usize, j) * 8, value);
+                value = (value ^ buf1[j + 1]) | (buf2[j + 1] ^ buf1[j + 1]);
+                carry = (buf1[j + 1] ^ value) >> 63;
+            }
+            return;
+        }
+        if (buf1[index] < buf2[index]) {
+            var carry1: u64 = 0;
+            var carry2: u64 = 0;
+            var j: u32 = 0;
+            while (j < cqw) : (j += 1) {
+                var value1 = endian.get64be(m, @as(usize, j) * 8);
+                const value2 = (buf1[j + 1] +% value1) +% carry1;
+                var value3 = (value2 -% buf2[j + 1]) -% carry2;
+                endian.set64be(c, @as(usize, j) * 8, value3);
+                value1 = value1 ^ value2;
+                value3 = value3 ^ value2;
+                carry1 = (((buf1[j + 1] ^ value2) | value1) ^ value2) >> 63;
+                carry2 = (((buf2[j + 1] ^ value3) | value3) ^ value2) >> 63;
+            }
+            return;
+        }
+    }
 }
 
 pub fn XeCryptBnQwNeModExp(output: []u8, input: []const u8, exponent: []const u8, modulus: []const u8, cqw: u32) bool {

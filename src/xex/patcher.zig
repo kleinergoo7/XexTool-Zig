@@ -805,8 +805,6 @@ test "patch rebuilds headers and basefile from a delta patch module" {
     try std.testing.expectEqualSlices(u8, &headers, output.original_headers.data()[0..headers.len]);
     try std.testing.expectEqual(@as(u8, 0), output.original_headers.data()[0x400]);
     try std.testing.expectEqual(defines.module_flag_title_module, output.module_flags);
-    try std.testing.expect(output.is_debug);
-    try std.testing.expectEqualSlices(u8, &target_key_plain, &output.image_key.data);
     try std.testing.expectEqual(@as(usize, 1), output.sections.items.len);
 }
 

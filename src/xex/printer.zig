@@ -239,9 +239,16 @@ pub fn printAll(writer: anytype, xex: *const model.Xex) !void {
         try writer.writeAll("\nStatic Libraries\n");
         for (xex.static_libraries.items, 0..) |library, index| {
             const name = fixedString(&library.name);
-            try writer.print("  {d: >3}) {s:<14} ", .{ index, name });
-            try printVersionInfo(writer, library.version);
-            try writer.print("  ({s}", .{approvedString(library.version.approvedLibrary())});
+            var buffer: [128]u8 = undefined;
+            const line = try std.fmt.bufPrint(&buffer, "{d: >3}) {s:<14} v{d}.{d}.{d}.{d}", .{
+                index,
+                name,
+                library.version.major,
+                library.version.minor,
+                library.version.build,
+                library.version.qfe(),
+            });
+            try writer.print("  {s:<32}  ({s}", .{ line, approvedString(library.version.approvedLibrary()) });
             if ((library.version.word & 0x0400) != 0) try writer.writeAll(", Tool Version");
             if ((library.version.word & 0x1000) != 0) try writer.writeAll(", Executable Version");
             if (library.version.debugBuild()) try writer.writeAll(", Debug Build");
@@ -253,11 +260,23 @@ pub fn printAll(writer: anytype, xex: *const model.Xex) !void {
         try writer.writeAll("\nImport Libraries\n");
         for (xex.import_libraries.items, 0..) |library, index| {
             const name = fixedString(&library.name);
-            try writer.print("  {d: >3}) {s:<14} ", .{ index, name });
-            try printVersion32(writer, "", library.version);
-            try writer.writeAll("  (min ");
-            try printVersion32(writer, "", library.min_version);
-            try writer.writeAll(")\n");
+            var buffer: [128]u8 = undefined;
+            const line = try std.fmt.bufPrint(&buffer, "{d: >3}) {s:<14} v{d}.{d}.{d}.{d}", .{
+                index,
+                name,
+                (types.Version32{ .dword = library.version }).major(),
+                (types.Version32{ .dword = library.version }).minor(),
+                (types.Version32{ .dword = library.version }).build(),
+                (types.Version32{ .dword = library.version }).qfe(),
+            });
+            const min_version = types.Version32{ .dword = library.min_version };
+            try writer.print("  {s:<32}  (min v{d}.{d}.{d}.{d})\n", .{
+                line,
+                min_version.major(),
+                min_version.minor(),
+                min_version.build(),
+                min_version.qfe(),
+            });
         }
     }
 

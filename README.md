@@ -31,6 +31,10 @@ flags, strings, logo, multidisc IDs, and unknown entries.
 The only remaining validation gap is a real XEXP/title-update fixture and a full
 XDK `.lib` directory for `genstubs` output comparison.
 
+Known limitation: XeCrypt's Montgomery debug-signature check is not bit-exact for every
+signature. When neither public key verifies, the reader falls back to retail. Retail GTA IV
+is verified byte-identical with the reference.
+
 ## Build
 
 Requires Zig 0.17.0.
