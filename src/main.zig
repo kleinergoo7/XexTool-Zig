@@ -18,6 +18,8 @@ const Options = struct {
     output_new_exe: bool = false,
     xml_output: bool = false,
     add_bounding_path: bool = false,
+    xexp_patch: bool = false,
+    xexp_filename: []const u8 = "",
     bounding_path: []const u8 = "",
     force_devkit: bool = false,
     force_retail: bool = false,
@@ -84,6 +86,11 @@ pub fn main(init: std.process.Init) !void {
         if (option == null) break;
         switch (option.?) {
             'l' => options.print_extended = true,
+            'p' => {
+                options.xexp_patch = true;
+                options.xexp_filename = getopt.optarg.?;
+                options.xex_altered = true;
+            },
             'b' => {
                 options.dump_basefile = true;
                 options.base_filename = getopt.optarg.?;
@@ -165,11 +172,6 @@ pub fn main(init: std.process.Init) !void {
             },
             's' => {
                 try out.print("Error: -s is not implemented yet\n", .{});
-                try out.flush();
-                std.process.exit(1);
-            },
-            'p' => {
-                try out.print("Error: -p is not implemented yet\n", .{});
                 try out.flush();
                 std.process.exit(1);
             },
@@ -316,6 +318,40 @@ pub fn main(init: std.process.Init) !void {
             };
             try out.print("Successfully dumped {d} resource{s} to {s}\n", .{ xex.resources.items.len, if (xex.resources.items.len > 1) "s" else "", options.res_dirname });
         }
+    }
+
+    if (options.xexp_patch) {
+        var patch_xex = xextool.xex.model.Xex.init(arena);
+        defer patch_xex.deinit();
+        const patch_read = xextool.xex.reader.readFile(&patch_xex, init.io, options.xexp_filename) catch false;
+        if (!patch_read) {
+            try out.print("Error reading patch file {s}\n", .{options.xexp_filename});
+            try out.flush();
+            std.process.exit(2);
+        }
+        if (xex.isPatchModule()) {
+            try out.print("Error can't patch a patch file! ({s} is a patch file)\n", .{options.xex_filename});
+            try out.flush();
+            std.process.exit(3);
+        }
+        if (!patch_xex.isPatchModule()) {
+            try out.print("{s} is not a patch file!\n", .{options.xexp_filename});
+            try out.flush();
+            std.process.exit(3);
+        }
+        if (!xextool.xex.patcher.isCorrectPatch(&xex, &patch_xex)) {
+            try out.print("{s} is not the correct patch file for {s}\n", .{ options.xexp_filename, options.xex_filename });
+            try out.flush();
+            std.process.exit(3);
+        }
+        const patched = xextool.xex.patcher.patch(arena, &xex, &patch_xex, out) catch {
+            try out.print("Error patching {s} with {s}\n", .{ options.xex_filename, options.xexp_filename });
+            try out.flush();
+            std.process.exit(3);
+        };
+        xex.deinit();
+        xex = patched;
+        options.xex_altered = true;
     }
 
     if (options.add_bounding_path) {
