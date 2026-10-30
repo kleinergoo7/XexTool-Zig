@@ -173,7 +173,7 @@ const update_unicode_key = [_]u8{ 0, 'u', 0, 'p', 0, 'd', 0, 'a', 0, 't', 0, 'e'
 const max_update_name = 1024;
 
 /// Rewrites "update:..." and its UTF-16 form in `.rdata` to "D:...".
-pub fn doUpdatePatchFix(gpa: std.mem.Allocator, xex: *model.Xex, out: anytype) Error!bool {
+pub fn doUpdatePatchFix(gpa: std.mem.Allocator, xex: *model.Xex) Error!bool {
     const parser = pe.Parser.init(xex.basefile.data());
     const section_count = parser.numberOfSections() orelse return error.InvalidPe;
 
@@ -248,7 +248,6 @@ pub fn doUpdatePatchFix(gpa: std.mem.Allocator, xex: *model.Xex, out: anytype) E
 
     if (result) {
         replaceBasefile(xex, &basefile);
-        try emit(out, "  patched update fix\n", .{});
     } else {
         basefile.deinit(gpa);
     }
@@ -1486,9 +1485,7 @@ test "special: update fix rewrites ASCII and UTF-16 names" {
     const unicode_source = [_]u8{ 0, 'u', 0, 'p', 0, 'd', 0, 'a', 0, 't', 0, 'e', 0, ':', 0, 'x', 0, 0 };
     try setBytes(gpa, &xex.basefile, &unicode_source, 0x240);
 
-    var discard_buf: [1]u8 = undefined;
-    var discard = std.Io.Writer.Discarding.init(&discard_buf);
-    try std.testing.expect(try doUpdatePatchFix(gpa, &xex, &discard.writer));
+    try std.testing.expect(try doUpdatePatchFix(gpa, &xex));
 
     const ascii_expected = "D:\\game\\data.bin";
     try std.testing.expectEqualSlices(u8, ascii_expected, xex.basefile.data()[0x204..][0..ascii_expected.len]);
@@ -1508,9 +1505,7 @@ test "special: update fix leaves files without .rdata alone" {
     const before = try gpa.dupe(u8, xex.basefile.data());
     defer gpa.free(before);
 
-    var discard_buf: [1]u8 = undefined;
-    var discard = std.Io.Writer.Discarding.init(&discard_buf);
-    try std.testing.expect(!try doUpdatePatchFix(gpa, &xex, &discard.writer));
+    try std.testing.expect(!try doUpdatePatchFix(gpa, &xex));
     try std.testing.expectEqualSlices(u8, before, xex.basefile.data());
 }
 

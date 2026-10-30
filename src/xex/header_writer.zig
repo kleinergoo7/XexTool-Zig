@@ -255,16 +255,172 @@ pub fn getSecurityInfo(xex: *const model.Xex, sec: *types.SecurityInfo) Error!vo
     sec.image_info.info_size = image_info_size;
     // The model keeps the complete flag word; C++ rebuilds the known bits and
     // ORs the unknown mask, which is the same value for any parsed header.
-    sec.image_info.image_flags = xex.image_flags;
+    sec.image_info.image_flags = rebuildImageFlags(xex.image_flags);
     sec.image_info.load_address = xex.load_address;
     sec.image_info.import_table_count = @intCast(xex.import_libraries.items.len);
     sec.image_info.media_id = xex.media_id;
     sec.image_info.image_key = xex.image_key;
     try encryptImageKey(xex, &sec.image_info.image_key);
     sec.image_info.export_table_address = xex.export_table_address;
-    sec.image_info.game_region = xex.regions;
-    sec.allowed_media_types = xex.media_types;
+    sec.image_info.game_region = rebuildRegions(xex.regions);
+    sec.allowed_media_types = rebuildMedia(xex.media_types);
     sec.section_count = @intCast(xex.sections.items.len);
+}
+
+/// XexWriter::writeSecurityInfo rebuilds each region field from its predicate
+/// and drops unknown bits; writing the raw word changes non-canonical input.
+fn rebuildModuleFlags(flags: u32) u32 {
+    var rebuilt: u32 = 0;
+    for ([_]u32{
+        defines.module_flag_title_module,
+        defines.module_flag_exports_to_title,
+        defines.module_flag_system_debugger,
+        defines.module_flag_dll_module,
+        defines.module_flag_patch_module,
+        defines.module_flag_patch_full,
+        defines.module_flag_patch_delta,
+        defines.module_flag_user_mode,
+    }) |mask| {
+        if ((flags & mask) != 0) rebuilt |= mask;
+    }
+    return rebuilt | (flags & defines.module_flag_unknown);
+}
+
+/// Rebuilds the known image bits and preserves IMAGEFLAG_UNKNOWN, matching
+/// XexWriter::getSecurityInfo.
+fn rebuildImageFlags(flags: u32) u32 {
+    var rebuilt: u32 = 0;
+    for ([_]u32{
+        defines.image_flag_manufacturing_utility,
+        defines.image_flag_manufacturing_tool,
+        defines.image_flag_xgd2,
+        defines.image_flag_cardea_key,
+        defines.image_flag_xeika_key,
+        defines.image_flag_title_usermode,
+        defines.image_flag_system_usermode,
+        defines.image_flag_orange0,
+        defines.image_flag_orange1,
+        defines.image_flag_orange2,
+        defines.image_flag_signed_kv_restricted,
+        defines.image_flag_iptv_signup_app,
+        defines.image_flag_iptv_title_app,
+        defines.image_flag_nccp_keys,
+        defines.image_flag_activation_req,
+        defines.image_flag_4k_pages,
+        defines.image_flag_no_game_region,
+        defines.image_flag_revocation_check_opt,
+        defines.image_flag_revocation_check_req,
+    }) |mask| {
+        if ((flags & mask) != 0) rebuilt |= mask;
+    }
+    return rebuilt | (flags & defines.image_flag_unknown);
+}
+
+fn rebuildSystemFlags(flags: u32) u32 {
+    var rebuilt: u32 = 0;
+    for ([_]u32{
+        defines.sys_flag_no_force_reboot,
+        defines.sys_flag_foreground_tasks,
+        defines.sys_flag_no_odd_mapping,
+        defines.sys_flag_handle_mce_input,
+        defines.sys_flag_restrict_hud_features,
+        defines.sys_flag_handle_gamepad_disconnect,
+        defines.sys_flag_insecure_sockets,
+        defines.sys_flag_xbox1_xsp_interop,
+        defines.sys_flag_set_dash_context,
+        defines.sys_flag_uses_game_voice_channel,
+        defines.sys_flag_pal50_incompatible,
+        defines.sys_flag_insecure_utilitydrive,
+        defines.sys_flag_has_xam_hooks,
+        defines.sys_flag_pii,
+        defines.sys_flag_crossplatform_syslink,
+        defines.sys_flag_multidisc_swap,
+        defines.sys_flag_multidisc_insecure_media,
+        defines.sys_flag_ap25_media,
+        defines.sys_flag_no_confirm_exit,
+        defines.sys_flag_allow_bkgrnd_download,
+        defines.sys_flag_create_persist_ramdrive,
+        defines.sys_flag_inherit_persist_ramdrive,
+        defines.sys_flag_allow_hud_vibration,
+        defines.sys_flag_both_utility_partitions,
+        defines.sys_flag_handle_iptv_input,
+        defines.sys_flag_prefer_bigbutton_input,
+        defines.sys_flag_allow_xsam_reservation,
+        defines.sys_flag_multidisc_cross_title,
+        defines.sys_flag_title_install_incompatible,
+        defines.sys_flag_allow_avatar_get_metadata,
+        defines.sys_flag_allow_controller_swapping,
+        defines.sys_flag_dash_extensibility_module,
+    }) |mask| {
+        if ((flags & mask) != 0) rebuilt |= mask;
+    }
+    return rebuilt | (flags & defines.sys_flag_unknown);
+}
+
+fn rebuildSystemFlags2(flags: u32) u32 {
+    var rebuilt: u32 = 0;
+    for ([_]u32{
+        defines.sys_flag2_allow_network_read_cancel,
+        defines.sys_flag2_uninterruptable_reads,
+        defines.sys_flag2_require_full_experience,
+        defines.sys_flag2_gamevoice_required_ui,
+        defines.sys_flag2_title_set_presence_string,
+        defines.sys_flag2_natal_tiltcontrol,
+        defines.sys_flag2_requires_skeletal_tracking,
+        defines.sys_flag2_supports_skeletal_tracking,
+        defines.sys_flag2_use_large_hds_file_cache,
+        defines.sys_flag2_title_supports_deep_link,
+    }) |mask| {
+        if ((flags & mask) != 0) rebuilt |= mask;
+    }
+    return rebuilt | (flags & defines.sys_flag2_unknown);
+}
+
+fn rebuildRegions(regions: u32) u32 {
+    var rebuilt: u32 = 0;
+    for ([_]u32{
+        defines.region_north_america,
+        defines.region_japan,
+        defines.region_china,
+        defines.region_rest_of_asia,
+        defines.region_aust_nz,
+        defines.region_rest_of_europe,
+        defines.region_rest_of_world,
+    }) |mask| {
+        if ((regions & mask) != 0) rebuilt |= mask;
+    }
+    return rebuilt;
+}
+
+/// Rebuilds the known media bits and preserves MEDIATYPE_UNKNOWN, matching
+/// XexWriter::writeSecurityInfo.
+fn rebuildMedia(media: u32) u32 {
+    var flags: u32 = 0;
+    for ([_]u32{
+        defines.media_hard_disk,
+        defines.media_dvdx2,
+        defines.media_dvd_cd,
+        defines.media_dvd5,
+        defines.media_dvd9,
+        defines.media_sys_flash,
+        defines.media_mem_unit,
+        defines.media_mass_storage,
+        defines.media_smb,
+        defines.media_ram,
+        defines.media_ram_drive,
+        defines.media_secure_virt_od,
+        defines.media_wireless_n_storage,
+        defines.media_sys_ext_partition,
+        defines.media_sys_aux_partition,
+        defines.media_insecure_pkg,
+        defines.media_savegame_pkg,
+        defines.media_localsign_pkg,
+        defines.media_livesign_pkg,
+        defines.media_xbox_pkg,
+    }) |mask| {
+        if ((media & mask) != 0) flags |= mask;
+    }
+    return flags | (media & defines.media_unknown);
 }
 
 fn encryptImageKey(xex: *const model.Xex, key: *types.Key) Error!void {
@@ -330,7 +486,7 @@ pub fn writeHeaders(xex: *const model.Xex, headers: *DataBlock, basefile_format:
     const buffer = headers.dataMut();
 
     @memcpy(buffer[0..4], &defines.xex_magic);
-    endian.set32be(buffer, header_module_flags, xex.module_flags);
+    endian.set32be(buffer, header_module_flags, rebuildModuleFlags(xex.module_flags));
     endian.set32be(buffer, header_size_of_headers, @bitCast(headers_size));
     endian.set32be(buffer, header_discardable, @bitCast(xex.discardable_header_size));
     endian.set32be(buffer, header_security_offset, @bitCast(try toI32(@intCast(sec_info_offset))));
@@ -666,10 +822,10 @@ pub fn getImageEntry(
     }
 
     if (xex.system_flags != 0) {
-        try sink.record(defines.image_key_system_flags, xex.system_flags);
+        try sink.record(defines.image_key_system_flags, rebuildSystemFlags(xex.system_flags));
     }
     if (xex.system_flags2 != 0) {
-        try sink.record(defines.image_key_system_flags2, xex.system_flags2);
+        try sink.record(defines.image_key_system_flags2, rebuildSystemFlags2(xex.system_flags2));
     }
 
     if (xex.execution_id) |execution_id| {

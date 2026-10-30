@@ -54,9 +54,9 @@ const delta_patch_descriptor = struct {
     const patch_data = 0x4C;
 };
 
-/// `DeltaBlock`, XexPatcher.cpp.
+/// `DeltaBlock`, XexPatcher.cpp: 4+4+2+2 bytes, no padding.
 const DeltaBlock = struct {
-    const size = 16;
+    const size = 12;
     const src = 0x00;
     const dest = 0x04;
     const decomp_size = 0x08;
@@ -400,6 +400,10 @@ const defines = @import("defines.zig");
 const lzx = @import("../lzx/lzx.zig");
 
 const test_zeros: [0x10]u8 = @splat(0);
+
+test "delta block header has no padding" {
+    try std.testing.expectEqual(@as(usize, 12), DeltaBlock.size);
+}
 
 fn setDeltaBlock(bytes: []u8, offset: usize, src: u32, dest: u32, decomp_size: u16, comp_size: u16) void {
     endian.set32be(bytes, offset + DeltaBlock.src, src);

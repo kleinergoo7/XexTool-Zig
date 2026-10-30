@@ -15,6 +15,8 @@ pub const Error = error{
 };
 
 pub fn dumpBasefile(io: std.Io, xex: *const model.Xex, path: []const u8) !void {
+    // C++ fwrite(size=0, count=1) returns 0, so an empty basefile is a failure.
+    if (xex.basefile.size() == 0) return error.EmptyBasefile;
     try file.writeAll(io, path, xex.basefile.data());
 }
 

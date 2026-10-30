@@ -311,36 +311,35 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (options.dump_basefile) {
-        xextool.xex.dump.dumpBasefile(init.io, &xex, options.base_filename) catch {
+        if (xextool.xex.dump.dumpBasefile(init.io, &xex, options.base_filename)) |_| {
+            try out.print("Successfully dumped basefile to {s}\n", .{options.base_filename});
+            if (xex.isBasefilePE()) {
+                try out.print("\nLoad basefile into IDA with the following details\nDO NOT load as a PE or EXE file as the format is not valid\nFile Type:       Binary file\nProcessor Type:  PowerPC: ppc\nLoad Address:    0x{X:0>8}\nEntry Point:     0x{X:0>8}\n", .{ xex.load_address, xex.entryPoint() });
+            }
+        } else |_| {
             try out.print("Error dumping basefile to {s}\n", .{options.base_filename});
-            try out.flush();
-            std.process.exit(1);
-        };
-        try out.print("Successfully dumped basefile to {s}\n", .{options.base_filename});
-        if (xex.isBasefilePE()) {
-            try out.print("\nLoad basefile into IDA with the following details\nDO NOT load as a PE or EXE file as the format is not valid\nFile Type:       Binary file\nProcessor Type:  PowerPC: ppc\nLoad Address:    0x{X:0>8}\nEntry Point:     0x{X:0>8}\n", .{ xex.load_address, xex.entryPoint() });
         }
     }
 
     if (options.dump_idc) {
-        xextool.xex.idc.dump(init.io, &xex, options.idc_filename, arena) catch {
+        if (xextool.xex.idc.dump(init.io, &xex, options.idc_filename, arena)) |_| {
+            try out.print("Successfully dumped basefile idc to {s}\n", .{options.idc_filename});
+        } else |_| {
             try out.print("Error dumping basefile idc to {s}\n", .{options.idc_filename});
-            try out.flush();
-            std.process.exit(1);
-        };
-        try out.print("Successfully dumped basefile idc to {s}\n", .{options.idc_filename});
+        }
     }
 
     if (options.dump_resources) {
         if (xex.resources.items.len == 0) {
             try out.print("File contains no resources\n", .{});
-        } else {
-            xextool.xex.dump.dumpResources(init.io, &xex, options.res_dirname, arena) catch {
-                try out.print("Error dumping resources to {s}\n", .{options.res_dirname});
-                try out.flush();
-                std.process.exit(1);
-            };
+        } else if (blk: {
+            // XexResourceDumper calls MKDIR(dirname) and ignores the result.
+            std.Io.Dir.cwd().createDir(init.io, options.res_dirname, .default_dir) catch {};
+            break :blk xextool.xex.dump.dumpResources(init.io, &xex, options.res_dirname, arena);
+        }) |_| {
             try out.print("Successfully dumped {d} resource{s} to {s}\n", .{ xex.resources.items.len, if (xex.resources.items.len > 1) "s" else "", options.res_dirname });
+        } else |_| {
+            try out.print("Error dumping resources to {s}\n", .{options.res_dirname});
         }
     }
 
@@ -379,7 +378,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (options.update_patches) {
-        if (xextool.xex.special.doUpdatePatchFix(arena, &xex, out) catch false) options.xex_altered = true;
+        if (xextool.xex.special.doUpdatePatchFix(arena, &xex) catch false) options.xex_altered = true;
     }
 
     if (options.special_patches) {

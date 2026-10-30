@@ -391,8 +391,6 @@ fn printSystemFlags(writer: anytype, xex: *const model.Xex) !void {
     }
     const unknown = xex.system_flags & defines.sys_flag_unknown;
     if (unknown != 0) try writer.print("  Unknown System Flags: {X:0>8}\n", .{unknown});
-    const unknown2 = xex.system_flags2 & defines.sys_flag2_unknown;
-    if (unknown2 != 0) try writer.print("  Unknown System Flags2: {X:0>8}\n", .{unknown2});
 }
 
 fn printHexBytes(writer: anytype, bytes: []const u8) !void {
