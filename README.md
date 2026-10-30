@@ -28,12 +28,10 @@ exercised path; XeCrypt, libLZX, and tinyxml2 are Zig modules in this tree.
 `pack` and the writer cover resources, imports, TLS, execution info, static libraries,
 flags, strings, logo, multidisc IDs, and unknown entries.
 
-The only remaining validation gap is a real XEXP/title-update fixture and a full
-XDK `.lib` directory for `genstubs` output comparison.
-
-Known limitation: XeCrypt's Montgomery debug-signature check is not bit-exact for every
-signature. When neither public key verifies, the reader falls back to retail. Retail GTA IV
-is verified byte-identical with the reference.
+Retail and devkit classification matches the reference. The encrypted devkit read path is
+verified against a locally encrypted copy of a real devkit XEX. Remaining validation gaps
+are a real XEXP/title-update fixture and a full XDK `.lib` directory for `genstubs`
+output comparison.
 
 ## Build
 
@@ -43,6 +41,9 @@ Requires Zig 0.17.0.
 zig build
 zig build test
 ```
+
+CI builds release binaries on Linux and Windows and uploads them as workflow
+artifacts. The macOS runner is disabled until hosted capacity is reliable.
 
 `XexTool/` is the C++ reference tree. It is intentionally ignored; build it separately
 when running differential tests.
@@ -54,8 +55,8 @@ src/cli/        option parsing and generated usage text
 src/core/       endian, bounded cursor, DataBlock, file I/O
 src/xecrypt/    XeCrypt subset used by XexTool
 src/xex/        XEX model, header, reader, packer, printer, dumps, XML
-src/lzx/        libLZX port (in progress)
-src/tinyxml2/   tinyxml2 port (in progress)
+src/lzx/        libLZX port
+src/tinyxml2/   tinyxml2 port
 ```
 
 ## Differential tests
@@ -69,6 +70,12 @@ cmake --build /tmp/xextool-ref
 ```
 
 Fixtures are generated locally and are not committed. Run comparisons with `TZ=UTC`.
+The banner carries the build time, so either strip its first line or pin it to the
+reference text:
+
+```sh
+zig build -Dbuild-title="XexTool v7.0  -  xorloser 2006-2017 (Build ...)"
+```
 
 ## License
 

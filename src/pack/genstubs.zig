@@ -6,6 +6,7 @@
 //! JSON import manifest the packer consumes.
 
 const std = @import("std");
+const text_mode = @import("../core/text.zig");
 
 const image_file_machine_powerpcbe: u16 = 0x01F2;
 
@@ -497,9 +498,10 @@ pub fn run(io: std.Io, args: []const []const u8, out: anytype) !u8 {
 
     // The reference prints the required-argument diagnostic on stderr while
     // the summary and help text go to stdout.
-    var stderr_buffer: [1024]u8 = undefined;
-    var stderr_writer: std.Io.File.Writer = .init(.stderr(), io, &stderr_buffer);
-    const errw = &stderr_writer.interface;
+    var stderr_writer: text_mode.Writer = undefined;
+    stderr_writer.init(.stderr(), io, arena.allocator());
+    defer stderr_writer.deinit();
+    const errw = &stderr_writer.writer;
 
     const result = runInternal(arena.allocator(), io, args, out, errw);
     const code = result catch |run_error| {

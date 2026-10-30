@@ -149,8 +149,25 @@ fn parseU32(text: []const u8) ?u32 {
     } else if (rest.len > 1 and rest[0] == '0') {
         base = 8;
     }
-    const end = std.mem.indexOfAny(u8, rest, " \t\r\n") orelse rest.len;
-    return std.fmt.parseInt(u32, rest[0..end], base) catch 0;
+
+    // strtoul stops at the first invalid digit instead of rejecting the whole
+    // string, so "204F8102" is 204 and "000000CC" is 0.
+    var value: u64 = 0;
+    var digits: usize = 0;
+    while (digits < rest.len) : (digits += 1) {
+        const digit = std.fmt.charToDigit(rest[digits], base) catch break;
+        value = value *% base +% digit;
+    }
+    if (digits == 0) return 0;
+    return @truncate(value);
+}
+
+test "parseU32 follows strtoul prefix and stop rules" {
+    try std.testing.expectEqual(@as(u32, 0xCC), parseU32("204F8102").?);
+    try std.testing.expectEqual(@as(u32, 0), parseU32("000000CC").?);
+    try std.testing.expectEqual(@as(u32, 0x1C9C386), parseU32("30000006").?);
+    try std.testing.expectEqual(@as(u32, 0x1234), parseU32("0x1234zz").?);
+    try std.testing.expectEqual(@as(u32, 0), parseU32("nope").?);
 }
 
 fn parseHexBytes(text: []const u8, output: anytype) bool {

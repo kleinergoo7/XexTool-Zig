@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 pub const endian = @import("core/endian.zig");
+pub const text = @import("core/text.zig");
 pub const DataBlock = @import("core/datablock.zig").DataBlock;
 pub const cursor = @import("core/cursor.zig");
 pub const getopt = @import("cli/getopt.zig");

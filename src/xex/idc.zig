@@ -346,7 +346,7 @@ pub fn dump(io: std.Io, xex: *const model.Xex, path: []const u8, gpa: std.mem.Al
     var buffer: std.Io.Writer.Allocating = .init(gpa);
     defer buffer.deinit();
     try write(&buffer.writer, xex, gpa);
-    try file.writeAll(io, path, buffer.written());
+    try file.writeAllText(io, path, buffer.written(), gpa);
 }
 
 /// Writes the IDC script to `writer`. Fails with `error.NotPeBasefile` when the

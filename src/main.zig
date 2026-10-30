@@ -3,11 +3,13 @@
 
 const std = @import("std");
 const xextool = @import("xextool");
+const build_options = @import("build_options");
+const text = xextool.text;
 const getopt_mod = xextool.getopt;
 const usage = @import("cli/usage.zig").usage;
 const defines = xextool.xex.defines;
 
-const title = "XexTool v7.0  -  xorloser 2006-2017 (Build Fri Oct 30 11:01:45 2026)";
+const title = build_options.title;
 
 const Options = struct {
     print_extended: bool = false,
@@ -59,13 +61,15 @@ pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
 
-    var stdout_buffer: [4096]u8 = undefined;
-    var stdout_file_writer: std.Io.File.Writer = .init(.stdout(), init.io, &stdout_buffer);
-    const out = &stdout_file_writer.interface;
+    var stdout_writer: text.Writer = undefined;
+    stdout_writer.init(.stdout(), init.io, arena);
+    defer stdout_writer.deinit();
+    const out = &stdout_writer.writer;
 
-    var stderr_buffer: [1024]u8 = undefined;
-    var stderr_file_writer: std.Io.File.Writer = .init(.stderr(), init.io, &stderr_buffer);
-    const err = &stderr_file_writer.interface;
+    var stderr_writer: text.Writer = undefined;
+    stderr_writer.init(.stderr(), init.io, arena);
+    defer stderr_writer.deinit();
+    const err = &stderr_writer.writer;
 
     if (args.len == 1) {
         try out.print("{s}\n{s}\n", .{ title, usage });
@@ -238,7 +242,7 @@ pub fn main(init: std.process.Init) !void {
                 if (std.mem.indexOfScalar(u8, arg, 'u') != null or std.mem.indexOfScalar(u8, arg, '0') != null) options.force_uncompressed = true;
                 if (std.mem.indexOfScalar(u8, arg, 'c') != null or std.mem.indexOfScalar(u8, arg, '1') != null) options.force_compressed = true;
                 if (std.mem.indexOfScalar(u8, arg, 'b') != null) options.force_binary = true;
-                const count = @intFromBool(options.force_uncompressed) + @intFromBool(options.force_compressed) + @intFromBool(options.force_binary);
+                const count = @as(u8, @intFromBool(options.force_uncompressed)) + @as(u8, @intFromBool(options.force_compressed)) + @as(u8, @intFromBool(options.force_binary));
                 if (count > 1) {
                     try out.print("{s}\nError trying to force to more than one compression format\n", .{title});
                     try out.flush();
@@ -266,6 +270,8 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    if (!options.xml_output) try out.print("{s}\n", .{title});
+
     if (args.len == 2) {
         options.print_shortened = true;
         options.xex_filename = args[1];
@@ -285,10 +291,9 @@ pub fn main(init: std.process.Init) !void {
     defer xex.deinit();
 
     if (!options.xml_output) {
-        try out.print("{s}\n", .{title});
         try out.print("Reading and parsing input xex file...\n", .{});
     }
-    if (!try xextool.xex.reader.readFile(&xex, init.io, options.xex_filename)) {
+    if (!(xextool.xex.reader.readFile(&xex, init.io, options.xex_filename) catch false)) {
         try out.print("Error reading xex file {s}\n", .{options.xex_filename});
         if (xex.is_delta_compressed) {
             try out.print("\"{s}\" is a delta compressed patch file\nIt's contents only make sense when used with the required xex file!\n\n", .{options.xex_filename});
