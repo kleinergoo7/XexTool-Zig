@@ -2223,7 +2223,7 @@ test "window base slides back by the secondary partition" {
 
 test "DEBUG return difference against C" {
     const allocator = std.testing.allocator;
-    var dest = [_]u8{0} ** 16;
+    var dest: [16]u8 = @splat(0);
     const e = try createCompressionWindow(allocator, &dest, 0x20000);
     defer destroyCompression(e);
     for (0..max_literal_items) |i| e.lit_data[i] = @truncate(i *% 37 +% 11);

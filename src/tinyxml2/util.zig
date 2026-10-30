@@ -1199,4 +1199,9 @@ test "float formatting matches printf %g" {
     try std.testing.expectEqualStrings("-0", formatDouble(&buf, -0.0));
     try std.testing.expectEqualStrings("inf", formatDouble(&buf, std.math.inf(f64)));
     try std.testing.expectEqualStrings("nan", formatDouble(&buf, std.math.nan(f64)));
+
+    // Values where the 17th significant digit matters; Zig's shortest form
+    // would print 16 digits and lose the correct last digit.
+    try std.testing.expectEqualStrings("6.2946752411953861e-44", formatDouble(&buf, @bitCast(@as(u64, 0x36f675cc81e74ef5))));
+    try std.testing.expectEqualStrings("4.7083251603875462e+207", formatDouble(&buf, @bitCast(@as(u64, 0x6b0d549b6f03675a))));
 }

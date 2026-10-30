@@ -5,6 +5,7 @@ const std = @import("std");
 const xextool = @import("xextool");
 const getopt_mod = xextool.getopt;
 const usage = @import("cli/usage.zig").usage;
+const defines = xextool.xex.defines;
 
 const title = "XexTool v7.0  -  xorloser 2006-2017 (Build Fri Oct 30 11:01:45 2026)";
 
@@ -16,6 +17,27 @@ const Options = struct {
     dump_idc: bool = false,
     output_new_exe: bool = false,
     xml_output: bool = false,
+    add_bounding_path: bool = false,
+    bounding_path: []const u8 = "",
+    force_devkit: bool = false,
+    force_retail: bool = false,
+    force_compressed: bool = false,
+    force_uncompressed: bool = false,
+    force_binary: bool = false,
+    force_decrypted: bool = false,
+    force_encrypted: bool = false,
+    remove_media: bool = false,
+    remove_region: bool = false,
+    remove_bounding_path: bool = false,
+    remove_bounding_device: bool = false,
+    remove_console_id: bool = false,
+    remove_dates: bool = false,
+    remove_kv: bool = false,
+    remove_signed_kv: bool = false,
+    remove_library_limit: bool = false,
+    remove_revocation: bool = false,
+    remove_media_id: bool = false,
+    xex_altered: bool = false,
     xml: xextool.xex.xmlout.Flags = .{},
     info_get: bool = false,
     info_set: bool = false,
@@ -58,11 +80,6 @@ pub fn main(init: std.process.Init) !void {
         if (option == null) break;
         switch (option.?) {
             'l' => options.print_extended = true,
-            'p' => {
-                try out.print("Error: -p is not implemented yet\n", .{});
-                try out.flush();
-                std.process.exit(1);
-            },
             'b' => {
                 options.dump_basefile = true;
                 options.base_filename = getopt.optarg.?;
@@ -134,10 +151,88 @@ pub fn main(init: std.process.Init) !void {
                     std.process.exit(1);
                 }
             },
-            'a', 'u', 's', 'r', 'm', 'c', 'e' => {
-                try out.print("Error: option -{c} is not implemented yet\n", .{option.?});
+            'a' => {
+                options.add_bounding_path = true;
+                options.bounding_path = getopt.optarg.?;
+                options.xex_altered = true;
+            },
+            'u' => {
+                try out.print("Error: -u is not implemented yet\n", .{});
                 try out.flush();
                 std.process.exit(1);
+            },
+            's' => {
+                try out.print("Error: -s is not implemented yet\n", .{});
+                try out.flush();
+                std.process.exit(1);
+            },
+            'p' => {
+                try out.print("Error: -p is not implemented yet\n", .{});
+                try out.flush();
+                std.process.exit(1);
+            },
+            'r' => {
+                const arg = getopt.optarg.?;
+                if (std.mem.indexOfScalar(u8, arg, 'a') != null) {
+                    options.remove_media = true;
+                    options.remove_region = true;
+                    options.remove_bounding_path = true;
+                    options.remove_bounding_device = true;
+                    options.remove_console_id = true;
+                    options.remove_dates = true;
+                    options.remove_kv = true;
+                    options.remove_signed_kv = true;
+                    options.remove_library_limit = true;
+                    options.remove_revocation = true;
+                    options.remove_media_id = true;
+                }
+                if (std.mem.indexOfScalar(u8, arg, 'm') != null) options.remove_media = true;
+                if (std.mem.indexOfScalar(u8, arg, 'r') != null) options.remove_region = true;
+                if (std.mem.indexOfScalar(u8, arg, 'b') != null) options.remove_bounding_path = true;
+                if (std.mem.indexOfScalar(u8, arg, 'd') != null) options.remove_bounding_device = true;
+                if (std.mem.indexOfScalar(u8, arg, 'i') != null) options.remove_console_id = true;
+                if (std.mem.indexOfScalar(u8, arg, 'y') != null) options.remove_dates = true;
+                if (std.mem.indexOfScalar(u8, arg, 'v') != null) options.remove_kv = true;
+                if (std.mem.indexOfScalar(u8, arg, 'k') != null) options.remove_signed_kv = true;
+                if (std.mem.indexOfScalar(u8, arg, 'l') != null) options.remove_library_limit = true;
+                if (std.mem.indexOfScalar(u8, arg, 'c') != null) options.remove_revocation = true;
+                if (std.mem.indexOfScalar(u8, arg, 'z') != null) options.remove_media_id = true;
+                options.xex_altered = true;
+            },
+            'm' => {
+                const arg = getopt.optarg.?;
+                if (std.mem.indexOfScalar(u8, arg, 'd') != null or std.mem.indexOfScalar(u8, arg, '0') != null) options.force_devkit = true;
+                if (std.mem.indexOfScalar(u8, arg, 'r') != null or std.mem.indexOfScalar(u8, arg, '1') != null) options.force_retail = true;
+                if (options.force_devkit and options.force_retail) {
+                    try out.print("{s}\nError trying to force to more than one machine format\n", .{title});
+                    try out.flush();
+                    std.process.exit(1);
+                }
+                options.xex_altered = true;
+            },
+            'c' => {
+                const arg = getopt.optarg.?;
+                if (std.mem.indexOfScalar(u8, arg, 'u') != null or std.mem.indexOfScalar(u8, arg, '0') != null) options.force_uncompressed = true;
+                if (std.mem.indexOfScalar(u8, arg, 'c') != null or std.mem.indexOfScalar(u8, arg, '1') != null) options.force_compressed = true;
+                if (std.mem.indexOfScalar(u8, arg, 'b') != null) options.force_binary = true;
+                const count = @intFromBool(options.force_uncompressed) + @intFromBool(options.force_compressed) + @intFromBool(options.force_binary);
+                if (count > 1) {
+                    try out.print("{s}\nError trying to force to more than one compression format\n", .{title});
+                    try out.flush();
+                    std.process.exit(1);
+                }
+                options.xex_altered = true;
+            },
+            'e' => {
+                const arg = getopt.optarg.?;
+                if (std.mem.indexOfScalar(u8, arg, 'd') != null or std.mem.indexOfScalar(u8, arg, 'u') != null or std.mem.indexOfScalar(u8, arg, '0') != null) options.force_decrypted = true;
+                if (std.mem.indexOfScalar(u8, arg, 'e') != null or std.mem.indexOfScalar(u8, arg, '1') != null) options.force_encrypted = true;
+                if (options.force_decrypted and options.force_encrypted) {
+                    try out.print("{s}\nError trying to force to more than one encryption format\n", .{title});
+                    try out.flush();
+                    std.process.exit(1);
+                }
+                options.xex_altered = true;
             },
             '?' => {
                 try out.print("{s}\nError unknown option \"{s}\"\n", .{ title, args[getopt.optind - 1] });
@@ -220,6 +315,81 @@ pub fn main(init: std.process.Init) !void {
             try out.print("Successfully dumped {d} resource{s} to {s}\n", .{ xex.resources.items.len, if (xex.resources.items.len > 1) "s" else "", options.res_dirname });
         }
     }
+
+    if (options.add_bounding_path) {
+        if (xex.bounding_path) |old| arena.free(old);
+        xex.bounding_path = try arena.dupe(u8, options.bounding_path);
+        try out.print("  added bounding path: {s}\n", .{options.bounding_path});
+        options.xex_altered = true;
+    }
+    if (options.remove_media) {
+        xex.media_types = defines.media_all;
+        xex.image_flags &= ~defines.image_flag_xgd2;
+        try out.print("  removed media limit\n", .{});
+    }
+    if (options.remove_region) {
+        xex.regions = defines.region_all;
+        try out.print("  removed region limit\n", .{});
+    }
+    if (options.remove_bounding_path) {
+        if (xex.bounding_path) |old| arena.free(old);
+        xex.bounding_path = null;
+        try out.print("  removed bounding path limit\n", .{});
+    }
+    if (options.remove_bounding_device) {
+        xex.bounding_device_id = null;
+        try out.print("  removed bounding device id limit\n", .{});
+    }
+    if (options.remove_console_id) {
+        xex.restrict_console_ids.clearRetainingCapacity();
+        try out.print("  removed console id restriction\n", .{});
+    }
+    if (options.remove_dates) {
+        xex.restrict_dates = null;
+        try out.print("  removed date restriction\n", .{});
+    }
+    if (options.remove_kv) {
+        xex.restrict_kv_privs = null;
+        try out.print("  removed keyvault privilege restriction\n", .{});
+    }
+    if (options.remove_signed_kv) {
+        xex.image_flags &= ~defines.image_flag_signed_kv_restricted;
+        try out.print("  removed signed keyvault only limit\n", .{});
+    }
+    if (options.remove_library_limit) {
+        for (xex.import_libraries.items) |*library| library.min_version = 0;
+        try out.print("  removed library version limit\n", .{});
+    }
+    if (options.remove_revocation) {
+        xex.image_flags &= ~defines.image_flag_revocation_check_req;
+        try out.print("  removed required revocation check\n", .{});
+    }
+    if (options.remove_media_id) {
+        xex.media_id = .{};
+        try out.print("  removed media id limit\n", .{});
+    }
+    if (options.force_devkit) xex.is_debug = true;
+    if (options.force_retail) xex.is_debug = false;
+    if (options.force_uncompressed) {
+        xex.is_raw = true;
+        xex.is_binary = false;
+        xex.is_compressed = false;
+        xex.is_delta_compressed = false;
+    }
+    if (options.force_binary) {
+        xex.is_raw = false;
+        xex.is_binary = true;
+        xex.is_compressed = false;
+        xex.is_delta_compressed = false;
+    }
+    if (options.force_compressed) {
+        xex.is_raw = false;
+        xex.is_binary = false;
+        xex.is_compressed = true;
+        xex.is_delta_compressed = false;
+    }
+    if (options.force_decrypted) xex.is_encrypted = false;
+    if (options.force_encrypted) xex.is_encrypted = true;
 
     if (options.xml_output) {
         try xextool.xex.xmlout.print(out, &xex, options.xml, arena);
