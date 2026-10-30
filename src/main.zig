@@ -374,7 +374,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (options.update_patches) {
-        if (xextool.xex.special.doUpdatePatchFix(arena, &xex) catch false) options.xex_altered = true;
+        if (xextool.xex.special.doUpdatePatchFix(arena, &xex, out) catch false) options.xex_altered = true;
     }
 
     if (options.special_patches) {
