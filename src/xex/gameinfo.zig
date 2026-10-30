@@ -254,7 +254,7 @@ test "game info: SPA name skips a non-0x8000 string" {
     endian.set16be(&spa, 0x91, 0x8000); // main string
     endian.set16be(&spa, 0x93, 5);
     @memcpy(spa[0x95..0x9A], "Hello");
-    @memcpy(spa[0xBC..0xC0], &.{ 1, 2, 3, 4 });
+    @memcpy(spa[0xBC..0xC0], &[_]u8{ 1, 2, 3, 4 });
 
     var block = DataBlock.init();
     defer block.deinit(allocator);

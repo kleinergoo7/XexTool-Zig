@@ -19,6 +19,8 @@ pub const Error = error{
     InvalidBaseFileInfo,
     Unsupported,
     UnsupportedCompression,
+    HashMismatch,
+    LzxFailed,
 };
 
 pub fn readFile(xex: *model.Xex, io: std.Io, path: []const u8) !bool {

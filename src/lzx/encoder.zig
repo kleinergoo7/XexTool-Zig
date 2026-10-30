@@ -399,7 +399,6 @@ fn putRawByte(self: *Encoder, byte: u8) void {
 }
 
 fn outMatch(self: *Encoder, len: u32, pos: u32) void {
-    std.debug.print("ITEM M {d} {d}\n", .{ len, pos });
     self.item_type[self.literals >> 3] |= @as(u8, 1) << @intCast(self.literals & 7);
     self.lit_data[self.literals] = @intCast(len - 2);
     self.literals += 1;
@@ -952,6 +951,16 @@ fn returnDifference(self: *Encoder, item_start1_in: u32, item_start2_in: u32, di
         freq2[element] +%= 1;
     }
 
+    if (size == resolution and item_start1_in == 2048) {
+        var s1: u32 = 0;
+        var s2: u32 = 0;
+        for (freq1) |v| s1 += v;
+        for (freq2) |v| s2 += v;
+    }
+    if (item_start1_in == 2048 and item_start2_in == 3072) {
+        var e: u32 = 0;
+        while (e < elements) : (e += 1) {}
+    }
     var cum_diff: u32 = 0;
     i = 0;
     while (i < elements) : (i += 1) {
@@ -996,10 +1005,10 @@ fn splitBlock(
 
     i = start + 2 * resolution;
     while (i < end -% (4 * resolution)) : (i += resolution) {
-        if (returnDifference(self, i, i + resolution, num_dist_at_item[i / step_size], num_dist_at_item[(i + resolution) / step_size], resolution) > threshold and
-            returnDifference(self, i - resolution, i + 2 * resolution, num_dist_at_item[(i - resolution) / step_size], num_dist_at_item[(i + 2 * resolution) / step_size], resolution) > threshold and
-            returnDifference(self, i - 2 * resolution, i + 3 * resolution, num_dist_at_item[(i - 2 * resolution) / step_size], num_dist_at_item[(i + 3 * resolution) / step_size], resolution) > threshold)
-        {
+        const d1 = returnDifference(self, i, i + resolution, num_dist_at_item[i / step_size], num_dist_at_item[(i + resolution) / step_size], resolution);
+        const d2 = returnDifference(self, i - resolution, i + 2 * resolution, num_dist_at_item[(i - resolution) / step_size], num_dist_at_item[(i + 2 * resolution) / step_size], resolution);
+        const d3 = returnDifference(self, i - 2 * resolution, i + 3 * resolution, num_dist_at_item[(i - 2 * resolution) / step_size], num_dist_at_item[(i + 3 * resolution) / step_size], resolution);
+        if (d1 > threshold and d2 > threshold and d3 > threshold) {
             var max_diff: u32 = 0;
             var literal_split: u32 = 0;
 
@@ -1748,6 +1757,12 @@ fn redoFirstBlock(self: *Encoder, buf_pos_ptr: *isize) Error!bool {
     const start_at: isize = @intCast(self.bufpos_last_output_block);
 
     var split_at_literal: u32 = 0;
+    var cks: u32 = 0;
+    for (self.lit_data[0..self.literals]) |b| cks +%= b;
+    var itc: u32 = 0;
+    for (self.item_type[0 .. self.literals / 8 + 1]) |b| itc +%= b;
+    var dck: u32 = 0;
+    for (self.dist_data[0..self.distances]) |d| dck +%= d;
     _ = splitBlock(self, 0, self.literals, self.distances, &split_at_literal, null);
 
     _ = getBlockStats(self, 0, 0, split_at_literal);
@@ -1805,7 +1820,6 @@ fn optEncodeTop(self: *Encoder, bytes_read: usize) Error!void {
 
             if (enc_match_len < c.min_match) {
                 self.lit_data[self.literals] = memGet(self, buf_pos);
-                std.debug.print("ITEM L {d}\n", .{self.lit_data[self.literals]});
                 self.literals += 1;
                 buf_pos += 1;
                 if (self.literals >= max_literal_items - 8) try blockEnd(self, buf_pos);
@@ -1816,7 +1830,6 @@ fn optEncodeTop(self: *Encoder, bytes_read: usize) Error!void {
                 enc_match_len = chunk_end - buf_pos;
                 if (enc_match_len < c.min_match) {
                     self.lit_data[self.literals] = memGet(self, buf_pos);
-                    std.debug.print("ITEM L {d}\n", .{self.lit_data[self.literals]});
                     self.literals += 1;
                     buf_pos += 1;
                     if (self.literals >= max_literal_items - 8) try blockEnd(self, buf_pos);
@@ -1830,7 +1843,12 @@ fn optEncodeTop(self: *Encoder, bytes_read: usize) Error!void {
                 const bpos: isize = buf_pos;
 
                 self.dn_base = bpos;
-                std.debug.print("DEC {d} {d}\n", .{ bpos, enc_match_len });
+                {
+                    var me: u32 = 0;
+                    const has2 = enc_match_len >= 2;
+                    const mp2: u32 = if (has2) self.matchpos_table[2] else 0;
+                    me = matchEst(self, 2, mp2);
+                }
                 // The C code writes decision_node[1] here, not node[bpos]; the
                 // shifted pointer makes those the same slot as dn(bpos + 1).
                 dn(self, bpos + 1).numbits = charEst(self, memGet(self, buf_pos));
@@ -1960,7 +1978,6 @@ fn optEncodeTop(self: *Encoder, bytes_read: usize) Error!void {
                     try blockEnd(self, buf_pos);
                 }
 
-                std.debug.print("DEOUT {d} {d}\n", .{ buf_pos, iterations });
                 while (true) {
                     const node = dn(self, buf_pos);
                     if (node.path > @as(u32, @intCast(buf_pos + 1))) {
@@ -1968,7 +1985,6 @@ fn optEncodeTop(self: *Encoder, bytes_read: usize) Error!void {
                         buf_pos = @intCast(node.path);
                     } else {
                         self.lit_data[self.literals] = memGet(self, buf_pos);
-                        std.debug.print("ITEM L {d}\n", .{self.lit_data[self.literals]});
                         self.literals += 1;
                         buf_pos += 1;
                     }
@@ -2203,4 +2219,15 @@ test "window base slides back by the secondary partition" {
 
     // After four chunks the window slid once: base = 32768 - 65536.
     try std.testing.expectEqual(@as(isize, -0x8000 - 0x10000), encoder.mem_base);
+}
+
+test "DEBUG return difference against C" {
+    const allocator = std.testing.allocator;
+    var dest = [_]u8{0} ** 16;
+    const e = try createCompressionWindow(allocator, &dest, 0x20000);
+    defer destroyCompression(e);
+    for (0..max_literal_items) |i| e.lit_data[i] = @truncate(i *% 37 +% 11);
+    for (0..max_literal_items / 8) |i| e.item_type[i] = @truncate(i *% 53 +% 7);
+    for (0..max_dist_items) |i| e.dist_data[i] = @intCast((i *% 101 +% 3) % 500 + 3);
+    std.debug.print("RDZ {d} {d}\n", .{ returnDifference(e, 0, 1024, 0, 10, 1024), returnDifference(e, 2048, 3072, 22, 44, 1024) });
 }

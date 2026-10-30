@@ -32,5 +32,17 @@ pub fn build(b: *std.Build) void {
 
     const tests = b.addTest(.{ .root_module = core });
     const run_tests = b.addRunArtifact(tests);
-    b.step("test", "Run unit tests").dependOn(&run_tests.step);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_tests.step);
+
+    inline for ([_][]const u8{ "src/lzx/lzx.zig", "src/tinyxml2/tinyxml2.zig" }) |root| {
+        const dep_tests = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(root),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        test_step.dependOn(&b.addRunArtifact(dep_tests).step);
+    }
 }

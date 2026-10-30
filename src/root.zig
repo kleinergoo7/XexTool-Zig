@@ -19,6 +19,8 @@ pub const xex = struct {
     pub const dump = @import("xex/dump.zig");
     pub const xmlout = @import("xex/xmlout.zig");
     pub const infoget = @import("xex/infoget.zig");
+    pub const gameinfo = @import("xex/gameinfo.zig");
+    pub const idc = @import("xex/idc.zig");
 };
 
 test {

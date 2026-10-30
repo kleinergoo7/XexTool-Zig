@@ -12,14 +12,16 @@ modules are being integrated.
 | Command | Status |
 |---|---|
 | no arguments / usage | byte-identical |
-| `-l` extended info | byte-identical on reference fixtures |
+| `-l` extended info | byte-identical on raw and compressed reference fixtures |
 | `-b <file>` basefile dump | byte-identical |
+| `-i <file>` IDC dump | byte-identical |
 | `-d <dir>` resource dump | byte-identical |
 | `-x <flags>` XML metadata | byte-identical for implemented flags |
 | `-z g <file>` info XML | byte-identical |
 
 Not implemented yet: `-p`, `-u`, `-s`, `-r`, `-m`, `-c`, `-e`, `-a`, `-o`, `-z s`,
-`pack`, `genstubs`, and `applyxml`.
+`pack`, `genstubs`, and `applyxml`. Compressed XEX reading works; writing lands with the
+writer integration.
 
 ## Build
 

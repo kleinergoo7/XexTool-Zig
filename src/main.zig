@@ -13,6 +13,7 @@ const Options = struct {
     print_shortened: bool = false,
     dump_basefile: bool = false,
     dump_resources: bool = false,
+    dump_idc: bool = false,
     output_new_exe: bool = false,
     xml_output: bool = false,
     xml: xextool.xex.xmlout.Flags = .{},
@@ -21,6 +22,7 @@ const Options = struct {
     info_path: []const u8 = "",
     base_filename: []const u8 = "",
     res_dirname: []const u8 = "",
+    idc_filename: []const u8 = "",
     out_filename: []const u8 = "",
     xex_filename: []const u8 = "",
 };
@@ -66,9 +68,8 @@ pub fn main(init: std.process.Init) !void {
                 options.base_filename = getopt.optarg.?;
             },
             'i' => {
-                try out.print("Error: -i is not implemented yet\n", .{});
-                try out.flush();
-                std.process.exit(1);
+                options.dump_idc = true;
+                options.idc_filename = getopt.optarg.?;
             },
             'd' => {
                 options.dump_resources = true;
@@ -198,6 +199,15 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    if (options.dump_idc) {
+        xextool.xex.idc.dump(init.io, &xex, options.idc_filename, arena) catch {
+            try out.print("Error dumping basefile idc to {s}\n", .{options.idc_filename});
+            try out.flush();
+            std.process.exit(1);
+        };
+        try out.print("Successfully dumped basefile idc to {s}\n", .{options.idc_filename});
+    }
+
     if (options.dump_resources) {
         if (xex.resources.items.len == 0) {
             try out.print("File contains no resources\n", .{});
@@ -212,7 +222,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (options.xml_output) {
-        try xextool.xex.xmlout.print(out, &xex, options.xml);
+        try xextool.xex.xmlout.print(out, &xex, options.xml, arena);
     }
 
     if (options.info_get) {

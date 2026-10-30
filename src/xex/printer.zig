@@ -5,6 +5,7 @@ const std = @import("std");
 const defines = @import("defines.zig");
 const model = @import("model.zig");
 const types = @import("types.zig");
+const gameinfo = @import("gameinfo.zig");
 
 extern "c" fn ctime(timer: *const std.c.time_t) ?[*:0]const u8;
 
@@ -37,6 +38,10 @@ pub fn printShort(writer: anytype, xex: *const model.Xex) !void {
     if (xex.extra_debug_memory) |size| try writer.print("  Requires {d}MB Extra Debug Memory\n", .{size});
 
     try writer.writeAll("\nBasefile Info\n");
+    var gamename: [1024]u8 = undefined;
+    if (gameinfo.gameName(xex.gpa, xex, &gamename) catch false) {
+        try writer.print("  Xex Name:           {s}\n", .{std.mem.sliceTo(&gamename, 0)});
+    }
     if (xex.original_pe_name) |name| try writer.print("  Original PE Name:   {s}\n", .{name});
     if (xex.isBasefilePE()) {
         const filetime: std.c.time_t = @intCast(xex.filetime());

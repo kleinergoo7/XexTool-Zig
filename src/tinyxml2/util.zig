@@ -385,15 +385,18 @@ fn normalize(ptr: [*]u8, len: usize, flags: StrFlags) []const u8 {
 const ScannedInt = struct {
     negative: bool,
     magnitude: u64,
+    /// strtoul/strtoull report ULLONG_MAX on overflow, without the sign.
+    overflowed: bool,
 };
 
-fn saturatingAdd(value: *u64, digit: u64, radix: u64) void {
+fn saturatingAdd(value: *u64, digit: u64, radix: u64) bool {
     const limit = std.math.maxInt(u64);
     if (value.* > (limit - digit) / radix) {
         value.* = limit;
-    } else {
-        value.* = value.* * radix + digit;
+        return true;
     }
+    value.* = value.* * radix + digit;
+    return false;
 }
 
 fn scanInt(s: []const u8, radix: u64) ?ScannedInt {
@@ -412,6 +415,7 @@ fn scanInt(s: []const u8, radix: u64) ?ScannedInt {
 
     var magnitude: u64 = 0;
     var digits: usize = 0;
+    var overflowed = false;
     while (p < s.len) : (p += 1) {
         const c = s[p];
         const digit: u64 = if (c >= '0' and c <= '9')
@@ -423,11 +427,11 @@ fn scanInt(s: []const u8, radix: u64) ?ScannedInt {
         else
             break;
         if (digit >= radix) break;
-        saturatingAdd(&magnitude, digit, radix);
+        overflowed = saturatingAdd(&magnitude, digit, radix) or overflowed;
         digits += 1;
     }
     if (digits == 0) return null;
-    return .{ .negative = negative, .magnitude = magnitude };
+    return .{ .negative = negative, .magnitude = magnitude, .overflowed = overflowed };
 }
 
 /// `XMLUtil::ToInt`: scanf "%d" or "%x", trailing garbage allowed.
@@ -435,7 +439,7 @@ pub fn toInt(s: []const u8, value: *i32) bool {
     if (isPrefixHex(s)) {
         const scanned = scanInt(s, 16) orelse return false;
         var raw = scanned.magnitude;
-        if (scanned.negative) raw = 0 -% raw;
+        if (scanned.negative and !scanned.overflowed) raw = 0 -% raw;
         value.* = @bitCast(@as(u32, @truncate(raw)));
         return true;
     }
@@ -462,7 +466,7 @@ pub fn toInt(s: []const u8, value: *i32) bool {
 pub fn toUnsigned(s: []const u8, value: *u32) bool {
     const scanned = scanInt(s, if (isPrefixHex(s)) 16 else 10) orelse return false;
     var raw = scanned.magnitude;
-    if (scanned.negative) raw = 0 -% raw;
+    if (scanned.negative and !scanned.overflowed) raw = 0 -% raw;
     value.* = @truncate(raw);
     return true;
 }
@@ -472,7 +476,7 @@ pub fn toInt64(s: []const u8, value: *i64) bool {
     if (isPrefixHex(s)) {
         const scanned = scanInt(s, 16) orelse return false;
         var raw = scanned.magnitude;
-        if (scanned.negative) raw = 0 -% raw;
+        if (scanned.negative and !scanned.overflowed) raw = 0 -% raw;
         value.* = @bitCast(raw);
         return true;
     }
@@ -495,7 +499,7 @@ pub fn toInt64(s: []const u8, value: *i64) bool {
 /// `XMLUtil::ToUnsigned64`: scanf "%llu" or "%llx".
 pub fn toUnsigned64(s: []const u8, value: *u64) bool {
     const scanned = scanInt(s, if (isPrefixHex(s)) 16 else 10) orelse return false;
-    value.* = if (scanned.negative) 0 -% scanned.magnitude else scanned.magnitude;
+    value.* = if (scanned.negative and !scanned.overflowed) 0 -% scanned.magnitude else scanned.magnitude;
     return true;
 }
 
@@ -565,7 +569,8 @@ fn scanFloatPrefix(s: []const u8, start: usize) ?usize {
             if (e < s.len and (s[e] == '+' or s[e] == '-')) e += 1;
             const exp_start = e;
             while (e < s.len and std.ascii.isDigit(s[e])) e += 1;
-            if (e > exp_start) q = e;
+            if (e == exp_start) return null; // scanf fails on a bare exponent
+            q = e;
         }
         return q;
     }
@@ -582,7 +587,8 @@ fn scanFloatPrefix(s: []const u8, start: usize) ?usize {
         if (e < s.len and (s[e] == '+' or s[e] == '-')) e += 1;
         const exp_start = e;
         while (e < s.len and std.ascii.isDigit(s[e])) e += 1;
-        if (e > exp_start) p = e;
+        if (e == exp_start) return null; // scanf fails on a bare exponent
+        p = e;
     }
     return p;
 }
@@ -592,7 +598,121 @@ fn parseFloatPrefix(comptime T: type, s: []const u8) ?T {
     var start: usize = 0;
     while (start < end and isWhitespace(s[start])) start += 1;
     if (start == end) return null;
+
+    var hex_start = start;
+    if (hex_start < end and (s[hex_start] == '+' or s[hex_start] == '-')) hex_start += 1;
+    if (hex_start + 1 < end and s[hex_start] == '0' and (s[hex_start + 1] == 'x' or s[hex_start + 1] == 'X')) {
+        return parseHexFloatExact(T, s[start..end]);
+    }
     return std.fmt.parseFloat(T, s[start..end]) catch null;
+}
+
+/// Exact `strtod`-style hex float conversion. Zig's `parseFloat` differs by an
+/// ulp for mantissas longer than 64 bits, so the value is rounded here with
+/// integer arithmetic and a single correctly rounded `ldexp`.
+fn parseHexFloatExact(comptime T: type, text: []const u8) ?T {
+    var p: usize = 0;
+    var negative = false;
+    if (p < text.len and (text[p] == '+' or text[p] == '-')) {
+        negative = text[p] == '-';
+        p += 1;
+    }
+    if (p + 1 >= text.len or text[p] != '0' or (text[p + 1] != 'x' and text[p + 1] != 'X')) return null;
+    p += 2;
+
+    var c: u128 = 0;
+    var collected: usize = 0;
+    var total: usize = 0;
+    var frac_digits: usize = 0;
+    var seen_point = false;
+    var seen_significant = false;
+
+    while (p < text.len) : (p += 1) {
+        const ch = text[p];
+        var digit: u8 = 0;
+        if (ch >= '0' and ch <= '9') {
+            digit = ch - '0';
+        } else if (ch >= 'a' and ch <= 'f') {
+            digit = ch - 'a' + 10;
+        } else if (ch >= 'A' and ch <= 'F') {
+            digit = ch - 'A' + 10;
+        } else if (ch == '.' and !seen_point) {
+            seen_point = true;
+            continue;
+        } else if (ch == 'p' or ch == 'P') {
+            break;
+        } else {
+            return null;
+        }
+
+        if (seen_point) frac_digits += 1;
+        if (!seen_significant and digit == 0) continue;
+        seen_significant = true;
+        total += 1;
+        if (collected < 32) {
+            c = (c << 4) | digit;
+            collected += 1;
+        }
+    }
+
+    if (total == 0) {
+        return if (negative) -@as(T, 0) else 0;
+    }
+
+    var exponent: i64 = 0;
+    if (p < text.len and (text[p] == 'p' or text[p] == 'P')) {
+        p += 1;
+        var exp_negative = false;
+        if (p < text.len and (text[p] == '+' or text[p] == '-')) {
+            exp_negative = text[p] == '-';
+            p += 1;
+        }
+        if (p == text.len) return null;
+        var seen_digit = false;
+        while (p < text.len and std.ascii.isDigit(text[p])) : (p += 1) {
+            seen_digit = true;
+            exponent = exponent *| 10 +| @as(i64, text[p] - '0');
+        }
+        if (!seen_digit) return null;
+        if (exp_negative) exponent = -exponent;
+    }
+
+    const tail: i64 = @as(i64, @intCast(total - collected));
+    const frac: i64 = @intCast(frac_digits);
+    var e2: i64 = 4 *| (tail - frac) +| exponent;
+
+    // floatMantissaBits() excludes the implicit leading bit.
+    const precision = std.math.floatMantissaBits(T) + 1;
+    const bit_length: u32 = 128 - @as(u32, @clz(c));
+    var q: u128 = c;
+    var shift: u32 = 0;
+    if (bit_length > precision) {
+        shift = bit_length - precision;
+        const half = @as(u128, 1) << @intCast(shift - 1);
+        const mask = (half << 1) - 1;
+        const remainder = c & mask;
+        q = c >> @intCast(shift);
+        if (remainder > half or (remainder == half and (q & 1) == 1)) {
+            q += 1;
+            if (q == (@as(u128, 1) << precision)) {
+                q >>= 1;
+                e2 = e2 +| 1;
+            }
+        }
+    }
+    e2 = e2 +| @as(i64, @intCast(shift));
+
+    // Clamp before the i32 conversion; ldexp already maps overflow to inf and
+    // severe underflow to zero.
+    const be: i32 = if (e2 > 100000)
+        100000
+    else if (e2 < -100000)
+        -100000
+    else
+        @intCast(e2);
+
+    const value: T = std.math.ldexp(@as(T, @floatFromInt(q)), be);
+    return if (negative) -value else value;
 }
 
 /// `XMLUtil::ToFloat`: scanf "%f".
@@ -1028,6 +1148,39 @@ test "float conversions follow scanf" {
     try std.testing.expect(toDouble("0.123456789", &d));
     try std.testing.expectApproxEqAbs(@as(f64, 0.123456789), d, 1e-12);
     try std.testing.expect(!toDouble("abc", &d));
+
+    // scanf skips leading space but fails when an exponent marker is bare.
+    try std.testing.expect(toFloat(" 9418194x", &f));
+    try std.testing.expectEqual(@as(f32, 9418194), f);
+    try std.testing.expect(!toFloat("73e", &f));
+    try std.testing.expect(!toFloat("1e+", &f));
+    try std.testing.expect(toFloat("1e3x", &f));
+    try std.testing.expectEqual(@as(f32, 1000), f);
+}
+
+test "hex float parsing is correctly rounded" {
+    var f: f32 = 0;
+    try std.testing.expect(toFloat("0X3713654", &f));
+    try std.testing.expectEqual(@as(u32, 0x4c5c4d95), @as(u32, @bitCast(f)));
+    try std.testing.expect(toFloat("0x1.8e2", &f));
+    try std.testing.expectEqual(@as(u32, 0x3fc71000), @as(u32, @bitCast(f)));
+
+    var d: f64 = 0;
+    // 21 hex mantissa digits: Zig's own parser rounds this one ulp low.
+    try std.testing.expect(toDouble("0X589424928447897330638e-3", &d));
+    try std.testing.expectEqual(@as(u64, 0x4556250924a111e2), @as(u64, @bitCast(d)));
+    try std.testing.expect(toDouble("0x1p3", &d));
+    try std.testing.expectEqual(@as(f64, 8), d);
+}
+
+test "unsigned overflow saturates without applying the sign" {
+    var u: u32 = 0;
+    try std.testing.expect(toUnsigned("-88991526152165896575abc", &u));
+    try std.testing.expectEqual(std.math.maxInt(u32), u);
+
+    var u64_value: u64 = 0;
+    try std.testing.expect(toUnsigned64("-7571920365723977676541x", &u64_value));
+    try std.testing.expectEqual(std.math.maxInt(u64), u64_value);
 }
 
 test "float formatting matches printf %g" {

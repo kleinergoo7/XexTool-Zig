@@ -4,6 +4,8 @@
 const std = @import("std");
 const defines = @import("defines.zig");
 const model = @import("model.zig");
+const gameinfo = @import("gameinfo.zig");
+const base64 = @import("../core/base64.zig");
 
 pub const Flags = struct {
     basefile: bool = false,
@@ -17,7 +19,7 @@ pub const Flags = struct {
     machine: bool = false,
 };
 
-pub fn print(writer: anytype, xex: *const model.Xex, flags: Flags) !void {
+pub fn print(writer: anytype, xex: *const model.Xex, flags: Flags, gpa: std.mem.Allocator) !void {
     try writer.writeAll("<XexInfo>\n");
     if (flags.basefile) {
         try writer.writeAll("    <BasefileType format=\"string\">");
@@ -37,10 +39,33 @@ pub fn print(writer: anytype, xex: *const model.Xex, flags: Flags) !void {
         try printHex(writer, &xex.media_id.data);
         try writer.writeAll("</MediaId>\n");
     }
+    if (flags.icon) {
+        if (gameinfo.gameIcon(gpa, xex) catch null) |icon_value| {
+            var icon = icon_value;
+            defer icon.deinit(gpa);
+            try writer.writeAll("    <GameIcon format=\"base64\">\n");
+            try base64.encode(writer, icon.data());
+            try writer.writeAll("\n    </GameIcon>\n");
+        }
+    }
     if (flags.medias) {
         try writer.writeAll("    <GameMedias>\n");
         try printMedias(writer, xex);
         try writer.writeAll("    </GameMedias>\n");
+    }
+    if (flags.name) {
+        var gamename: [1024]u8 = undefined;
+        if (gameinfo.gameName(gpa, xex, &gamename) catch false) {
+            try writer.writeAll("    <GameName format=\"string\">");
+            for (std.mem.sliceTo(&gamename, 0)) |ch| {
+                if (ch >= ' ' and ch < 127 and ch != '&' and ch != '<' and ch != '>' and ch != '\'' and ch != '"') {
+                    try writer.writeByte(ch);
+                } else {
+                    try writer.print("&#{d};", .{ch});
+                }
+            }
+            try writer.writeAll("</GameName>\n");
+        }
     }
     if (flags.bound_path) {
         if (xex.bounding_path) |path| {
