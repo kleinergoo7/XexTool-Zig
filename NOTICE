@@ -1,0 +1,33 @@
+XexTool Zig
+Copyright (C) 2026 XexTool Zig contributors
+
+This project is a Zig rewrite of XexTool and is distributed under the
+GNU General Public License version 3 or later. See LICENSE.
+
+Upstream and third-party notices:
+
+XexTool
+  Upstream: https://github.com/Team-Resurgent/XexTool
+  License: GNU General Public License v3
+  Original author: xorloser, 2006-2017.
+  This rewrite is based on upstream commit ed52481.
+
+XeCrypt
+  Upstream: https://github.com/Team-Resurgent/XeCrypt
+  Pinned commit: 3949da41b1c3f6da48e0fa1e4f585f9c3baa975a
+  License: MIT
+  Author: cOz.
+
+libLZX
+  Upstream: https://github.com/Team-Resurgent/libLZX
+  Pinned commit: a0a31affe3b947bf400503aacd3e2735ce8e7021
+  License: GNU General Public License v3
+  Author: tommojphillips.
+
+tinyxml2
+  Upstream: https://github.com/leethomason/tinyxml2
+  Pinned commit: 8224e427b655b83dae5e2298f1e6919523a78737
+  License: zlib
+  Author: Lee Thomason.
+
+No game files, firmware, or extracted assets are included.
