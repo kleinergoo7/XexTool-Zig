@@ -3,9 +3,8 @@
 Zig 0.17.0 rewrite of [XexTool](https://github.com/Team-Resurgent/XexTool), the Xbox 360
 XEX inspector, patcher, and packer.
 
-The rewrite is in progress. The read-only XEX path already matches the C++ reference on
-synthetic and reference-generated fixtures. The write path and the ported dependency
-modules are being integrated.
+The port is feature-complete. Valid-input output matches the C++ reference on every
+exercised path; XeCrypt, libLZX, and tinyxml2 are Zig modules in this tree.
 
 ## What works
 
