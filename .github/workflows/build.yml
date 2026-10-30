@@ -23,6 +23,34 @@ jobs:
         run: zig build -Doptimize=ReleaseFast
       - name: Test
         run: zig build test
+      - name: Check Windows text mode
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'zig-out\bin\XexTool.exe'
+          $cases = @(
+            @{ Out = 'stdout.bin'; Err = 'stderr.bin'; Args = @() },
+            @{ Out = 'stubs-out.bin'; Err = 'stubs-err.bin'; Args = @('genstubs') }
+          )
+          foreach ($case in $cases) {
+            $p = Start-Process -FilePath $exe -ArgumentList $case.Args -NoNewWindow -Wait -PassThru `
+              -RedirectStandardOutput $case.Out -RedirectStandardError $case.Err
+            foreach ($file in @($case.Out, $case.Err)) {
+              $bytes = [IO.File]::ReadAllBytes((Join-Path $PWD $file))
+              if ($bytes.Length -eq 0) { continue }
+              $crlf = 0
+              $bad = 0
+              for ($i = 0; $i -lt $bytes.Length; $i++) {
+                if ($bytes[$i] -eq 10) {
+                  if ($i -gt 0 -and $bytes[$i - 1] -eq 13) { $crlf++ } else { $bad++ }
+                }
+              }
+              if ($bad -ne 0 -or $crlf -eq 0) {
+                throw "$file is not CRLF text: bad=$bad crlf=$crlf"
+              }
+              Write-Host "$file CRLF lines: $crlf"
+            }
+          }
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
