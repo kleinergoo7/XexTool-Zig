@@ -20,6 +20,17 @@ jobs:
         if: runner.os != 'Windows'
         run: zig fmt --check build.zig src
       - name: Build
-        run: zig build
+        run: zig build -Doptimize=ReleaseFast
       - name: Test
         run: zig build test
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XexTool-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            zig-out/bin/XexTool*
+            LICENSE
+            NOTICE
+            README.md
+          if-no-files-found: error
+          retention-days: 14
