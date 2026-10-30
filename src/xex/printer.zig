@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 const std = @import("std");
+const builtin = @import("builtin");
 const defines = @import("defines.zig");
 const model = @import("model.zig");
 const types = @import("types.zig");
 const gameinfo = @import("gameinfo.zig");
 
-extern "c" fn ctime(timer: *const std.c.time_t) ?[*:0]const u8;
+const c_time_t = if (builtin.os.tag == .windows) c_longlong else std.c.time_t;
+extern "c" fn ctime(timer: *const c_time_t) ?[*:0]const u8;
 
 pub fn printShort(writer: anytype, xex: *const model.Xex) !void {
     try writer.writeAll("Xex Info\n");
@@ -44,7 +46,7 @@ pub fn printShort(writer: anytype, xex: *const model.Xex) !void {
     }
     if (xex.original_pe_name) |name| try writer.print("  Original PE Name:   {s}\n", .{name});
     if (xex.isBasefilePE()) {
-        const filetime: std.c.time_t = @intCast(xex.filetime());
+        const filetime: c_time_t = @intCast(xex.filetime());
         const time_text = ctime(&filetime);
         try writer.print("  Load Address:       {X:0>8}\n", .{xex.load_address});
         try writer.print("  Entry Point:        {X:0>8}\n", .{xex.entryPoint()});
