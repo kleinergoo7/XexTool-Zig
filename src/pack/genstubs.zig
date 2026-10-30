@@ -487,10 +487,27 @@ fn runInternal(gpa: std.mem.Allocator, io: std.Io, args: []const []const u8, out
     return 0;
 }
 
+pub fn runWithAllocator(gpa: std.mem.Allocator, io: std.Io, args: []const []const u8, out: anytype) !u8 {
+    return runInternal(gpa, io, args, out, out);
+}
+
 pub fn run(io: std.Io, args: []const []const u8, out: anytype) !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-    return runWithAllocator(arena.allocator(), io, args, out);
+
+    // The reference prints the required-argument diagnostic on stderr while
+    // the summary and help text go to stdout.
+    var stderr_buffer: [1024]u8 = undefined;
+    var stderr_writer: std.Io.File.Writer = .init(.stderr(), io, &stderr_buffer);
+    const errw = &stderr_writer.interface;
+
+    const result = runInternal(arena.allocator(), io, args, out, errw);
+    const code = result catch |run_error| {
+        errw.flush() catch return run_error;
+        return run_error;
+    };
+    try errw.flush();
+    return code;
 }
 
 // ---------------------------------------------------------------------------
