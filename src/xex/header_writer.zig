@@ -1504,10 +1504,11 @@ test "writeHeaders: patched XEX has no security gap and uses 0x800 alignment" {
 
 test "write file round-trips a fixture when XEXTOOL_TEST_DIR is set" {
     const gpa = std.testing.allocator;
-    const dir = std.process.Environ.getPosix(std.testing.environ, "XEXTOOL_TEST_DIR") orelse {
+    const dir = std.process.Environ.getAlloc(std.testing.environ, std.testing.allocator, "XEXTOOL_TEST_DIR") catch {
         std.debug.print("skipping writer fixture test: XEXTOOL_TEST_DIR is unset\n", .{});
         return;
     };
+    defer gpa.free(dir);
     const path = try std.fs.path.join(gpa, &.{ dir, "writer", "input.xex" });
     defer gpa.free(path);
     const input = std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, gpa, .limited(1 << 30)) catch |err| switch (err) {

@@ -26,10 +26,11 @@ fn printToString(doc: *const XMLDocument, allocator: std.mem.Allocator, compact:
 }
 
 fn resourcePath(allocator: std.mem.Allocator, name: []const u8) !?[]u8 {
-    const dir = std.process.Environ.getPosix(std.testing.environ, "XEXTOOL_TEST_DIR") orelse {
+    const dir = std.process.Environ.getAlloc(std.testing.environ, allocator, "XEXTOOL_TEST_DIR") catch {
         std.debug.print("XEXTOOL_TEST_DIR unset; skipping resource test\n", .{});
         return null;
     };
+    defer allocator.free(dir);
     return try std.fs.path.join(allocator, &.{ dir, name });
 }
 

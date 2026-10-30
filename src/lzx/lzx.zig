@@ -311,10 +311,11 @@ test "roundtrip 2 MiB window over two chunks" {
 test "product lzx output matches the reference when XEXTOOL_TEST_DIR is set" {
     const allocator = testing.allocator;
 
-    const dir = std.process.Environ.getPosix(std.testing.environ, "XEXTOOL_TEST_DIR") orelse {
+    const dir = std.process.Environ.getAlloc(std.testing.environ, std.testing.allocator, "XEXTOOL_TEST_DIR") catch {
         std.debug.print("skipping LZX fixture test: XEXTOOL_TEST_DIR is unset\n", .{});
         return;
     };
+    defer allocator.free(dir);
 
     const path = try std.fs.path.join(allocator, &.{ dir, "lzx", "window.bin" });
     defer allocator.free(path);
