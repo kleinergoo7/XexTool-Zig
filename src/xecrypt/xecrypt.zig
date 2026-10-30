@@ -271,7 +271,7 @@ pub fn XeCryptBnQwBeSigVerify(signature: []const u8, hash: []const u8, salt: []c
     const modulus = key[0x10..][0 .. @as(usize, count) * 8];
     var decrypted: [256]u8 = @splat(0);
     var exponent_qw: [256]u8 = @splat(0);
-    endian.set32be(&exponent_qw, 0, exp);
+    endian.set64be(&exponent_qw, 0, exp);
     if (!XeCryptBnQwNeModExp(&decrypted, signature[0..256], &exponent_qw, modulus, count)) return false;
     return std.mem.eql(u8, &decrypted, &expected);
 }
@@ -312,12 +312,14 @@ fn bnQwBeBufSwap(data: []u8) void {
 }
 
 fn lessThanQwArray(a: *const [256]u8, b: []const u8) bool {
-    var i: usize = 0;
-    while (i < 32) : (i += 1) {
+    // XeCryptBnQwNeCompare walks limbs from the most significant qword down.
+    var i: usize = 31;
+    while (true) : (i -= 1) {
         const av = endian.get64be(a, i * 8);
         const bv = endian.get64be(b, i * 8);
         if (av < bv) return true;
         if (av > bv) return false;
+        if (i == 0) break;
     }
     return false;
 }
