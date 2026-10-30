@@ -21,8 +21,16 @@ modules are being integrated.
 | `-z s <file>` set info | byte-identical |
 | `-r`, `-m`, `-c`, `-e`, `-a`, `-o` | byte-identical on reference fixtures |
 | `applyxml <xex> --xml <file>` | byte-identical |
+| `-p <xexp>` XEXP patch | ported; synthetic patcher tests |
+| `-u`, `-s`, `-r s` | ported; synthetic/table tests |
+| `pack <elf> -o <xex>` | byte-identical on PPC ELF fixture |
+| `genstubs` | ported; help/error behavior matches |
 
-Not implemented yet: `-p`, `-u`, `-s`, `-r s`, `pack`, and `genstubs`.
+`pack` and the writer cover resources, imports, TLS, execution info, static libraries,
+flags, strings, logo, multidisc IDs, and unknown entries.
+
+The only remaining validation gap is a real XEXP/title-update fixture and a full
+XDK `.lib` directory for `genstubs` output comparison.
 
 ## Build
 
