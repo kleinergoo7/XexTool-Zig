@@ -93,10 +93,6 @@ fn toI32(value: usize) Error!i32 {
     return @intCast(value);
 }
 
-fn toI64(value: i32) i64 {
-    return value;
-}
-
 fn alignUp(value: i64, alignment: i32) Error!i32 {
     const mask: i64 = @as(i64, alignment) - 1;
     const aligned = (value + mask) & ~mask;
@@ -567,6 +563,9 @@ pub fn getImageEntry(
         for (xex.import_libraries.items) |library| {
             if (library.addresses.len > std.math.maxInt(i32)) return error.HeaderSizeOverflow;
             const address_count: i32 = @intCast(library.addresses.len);
+            if (address_count > @divTrunc(std.math.maxInt(i32) - import_entry_size, 4)) {
+                return error.HeaderSizeOverflow;
+            }
             const addresses_size: i32 = address_count * 4;
             const library_size: i32 = import_entry_size + addresses_size;
             try block.set32(gpa, @bitCast(library_size), library_offset);
